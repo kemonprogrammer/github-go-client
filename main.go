@@ -5,23 +5,30 @@ import (
 	"fmt"
 	"github.com/google/go-github/v81/github"
 	"os"
+	"strings"
 )
 
 func main() {
+	if strings.ToUpper(os.Getenv("TEST")) == "TRUE" {
+		return
+	}
+
 	// setup github
 	owner := "kemonprogrammer"
 	repo := "github-go-client"
 	githubPat := os.Getenv("GITHUB_PAT")
+	env := os.Getenv("ENVIRONMENT")
 	ctx := context.Background()
 	client := github.NewClient(nil).WithAuthToken(githubPat)
 
 	// todo what can be cached // how to refresh cache
+	// notes: older deployments can't be updated?
 	deployments, _, _ := client.Repositories.ListDeployments(ctx, owner, repo, &github.DeploymentsListOptions{
 		SHA:         "",
 		Ref:         "",
 		Task:        "",
-		Environment: "",
-		ListOptions: github.ListOptions{},
+		Environment: env,
+		ListOptions: github.ListOptions{}, // todo handle more than 30 deployments (default)
 	})
 	fmt.Printf("len deploys: %d", len(deployments))
 
@@ -44,7 +51,7 @@ func main() {
 
 		commitCmp, _, err := client.Repositories.CompareCommits(ctx, owner, repo, base, head, &github.ListOptions{
 			Page:    0,
-			PerPage: 10,
+			PerPage: 10, // todo handle more than 10 commits -> maybe "61 more commits\n<compare-url>"
 		})
 
 		if err != nil {
@@ -54,9 +61,13 @@ func main() {
 
 		//fmt.Printf("Head and base differ by %d commits:\n", commitCmp.GetTotalCommits())
 		for _, c := range commitCmp.Commits {
-			fmt.Printf("+ %s\n", c.Commit.GetMessage())
+			fmt.Printf("+ %s\n", GetTitle(c.Commit.GetMessage()))
 		}
 	}
+}
+
+func GetTitle(message string) string {
+	return strings.Split(message, "\n")[0]
 }
 
 func FilterSuccessful(client *github.Client, ctx context.Context, owner, repo string, deployments []*github.Deployment) ([]*github.Deployment, error) {
