@@ -23,7 +23,12 @@ func main() {
 		ListOptions: github.ListOptions{},
 	})
 
-	for i, d := range filterSuccessfulDeployments(client, ctx, owner, repo, deployments) {
+	successfulDeployments, err := filterSuccessfulDeployments(client, ctx, owner, repo, deployments)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	for i, d := range successfulDeployments {
 		fmt.Printf("\nDeployment %d:\n", i)
 
 		fmt.Printf("sha: %s\n", d.GetSHA())
@@ -31,25 +36,28 @@ func main() {
 		fmt.Printf("created at: %s\n", d.GetCreatedAt())
 	}
 
-	// read deployments
-
-	//orgs, _, _ := client.Organizations.List(context.Background(), "willnorris", nil)
 }
 
-func filterSuccessfulDeployments(client *github.Client, ctx context.Context, owner string, repo string, deployments []*github.Deployment) []*github.Deployment {
-	var result []*github.Deployment
+func filterSuccessfulDeployments(client *github.Client, ctx context.Context, owner, repo string, deployments []*github.Deployment) ([]*github.Deployment, error) {
+	result := make([]*github.Deployment, 0, len(deployments))
 
 	for _, d := range deployments {
+		if d.ID == nil {
+			continue
+		}
 
-		statuses, _, _ := client.Repositories.ListDeploymentStatuses(ctx, owner, repo, d.GetID(), &github.ListOptions{
-			Page:    0,
+		statuses, _, err := client.Repositories.ListDeploymentStatuses(ctx, owner, repo, d.GetID(), &github.ListOptions{
 			PerPage: 10,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get deployment statuses for %d: %w", d.GetID(), err)
+		}
 		for _, status := range statuses {
 			if status.GetState() == "success" {
 				result = append(result, d)
+				break
 			}
 		}
 	}
-	return result
+	return result, nil
 }
