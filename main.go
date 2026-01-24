@@ -31,35 +31,32 @@ func main() {
 	}
 
 	for i, d := range successfulDeployments {
-		fmt.Printf("\nDeployment %d:\n", i)
+		fmt.Printf("\nDeployment %d:\n", d.GetID())
 
 		fmt.Printf("sha: %s\n", d.GetSHA())
-		fmt.Printf("id: %d\n", d.GetID())
 		fmt.Printf("created at: %s\n", d.GetCreatedAt())
+
+		if len(successfulDeployments) < 2 || i+1 >= len(successfulDeployments) {
+			continue
+		}
+		head := successfulDeployments[i].GetSHA()
+		base := successfulDeployments[i+1].GetSHA()
+
+		commitCmp, _, err := client.Repositories.CompareCommits(ctx, owner, repo, base, head, &github.ListOptions{
+			Page:    0,
+			PerPage: 10,
+		})
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		//fmt.Printf("Head and base differ by %d commits:\n", commitCmp.GetTotalCommits())
+		for _, c := range commitCmp.Commits {
+			fmt.Printf("+ %s\n", c.Commit.GetMessage())
+		}
 	}
-
-	if len(successfulDeployments) < 2 {
-		fmt.Println("Not enough deployments to make a comparison")
-		return
-	}
-	head := successfulDeployments[0].GetSHA()
-	base := successfulDeployments[1].GetSHA()
-
-	commitCmp, _, err := client.Repositories.CompareCommits(ctx, owner, repo, base, head, &github.ListOptions{
-		Page:    0,
-		PerPage: 10,
-	})
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Head and base differ by %d commits:\n", commitCmp.GetTotalCommits())
-	for _, c := range commitCmp.Commits {
-		fmt.Printf("* %s\n", c.Commit.GetMessage())
-	}
-
 }
 
 func FilterSuccessful(client *github.Client, ctx context.Context, owner, repo string, deployments []*github.Deployment) ([]*github.Deployment, error) {
