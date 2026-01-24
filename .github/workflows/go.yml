@@ -32,7 +32,3 @@ jobs:
     steps:
       - name: deploy
         run : echo "Deployment sucess"
-      - name: deploy-after
-        run: echo "One cmd failed:"; false
-      - name: deploy-after-after
-        run: echo "Last cmd"; true
