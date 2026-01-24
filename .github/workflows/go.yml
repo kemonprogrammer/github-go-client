@@ -26,3 +26,11 @@ jobs:
 
     - name: Test
       run: go test -v ./...
+  deployment:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: deploy
+        run : echo "Deployment sucess"
+      - name: deploy-after
+        run: echo "Failing deployment:"; false
