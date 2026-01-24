@@ -33,4 +33,6 @@ jobs:
       - name: deploy
         run : echo "Deployment sucess"
       - name: deploy-after
-        run: echo "Failing deployment:"; false
+        run: echo "One cmd failed:"; false
+      - name: deploy-after-after
+        run: echo "Last cmd"; true
