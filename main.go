@@ -15,6 +15,7 @@ func main() {
 	ctx := context.Background()
 	client := github.NewClient(nil).WithAuthToken(githubPat)
 
+	// todo what can be cached // how to refresh cache
 	deployments, _, _ := client.Repositories.ListDeployments(ctx, owner, repo, &github.DeploymentsListOptions{
 		SHA:         "",
 		Ref:         "",
@@ -22,8 +23,9 @@ func main() {
 		Environment: "",
 		ListOptions: github.ListOptions{},
 	})
+	fmt.Printf("len deploys: %d", len(deployments))
 
-	successfulDeployments, err := filterSuccessfulDeployments(client, ctx, owner, repo, deployments)
+	successfulDeployments, err := FilterSuccessful(client, ctx, owner, repo, deployments)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -36,9 +38,31 @@ func main() {
 		fmt.Printf("created at: %s\n", d.GetCreatedAt())
 	}
 
+	if len(successfulDeployments) < 2 {
+		fmt.Println("Not enough deployments to make a comparison")
+		return
+	}
+	head := successfulDeployments[0].GetSHA()
+	base := successfulDeployments[1].GetSHA()
+
+	commitCmp, _, err := client.Repositories.CompareCommits(ctx, owner, repo, base, head, &github.ListOptions{
+		Page:    0,
+		PerPage: 10,
+	})
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("Head and base differ by %d commits:\n", commitCmp.GetTotalCommits())
+	for _, c := range commitCmp.Commits {
+		fmt.Printf("* %s\n", c.Commit.GetMessage())
+	}
+
 }
 
-func filterSuccessfulDeployments(client *github.Client, ctx context.Context, owner, repo string, deployments []*github.Deployment) ([]*github.Deployment, error) {
+func FilterSuccessful(client *github.Client, ctx context.Context, owner, repo string, deployments []*github.Deployment) ([]*github.Deployment, error) {
 	result := make([]*github.Deployment, 0, len(deployments))
 
 	for _, d := range deployments {
