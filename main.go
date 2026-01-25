@@ -14,7 +14,7 @@ func main() {
 	}
 
 	// setup github
-	owner := "kemonprogrammer"
+	owner := os.Getenv("OWNER")
 	repo := "github-go-client"
 	githubPat := os.Getenv("GITHUB_PAT")
 	env := os.Getenv("ENVIRONMENT")
@@ -22,7 +22,7 @@ func main() {
 	client := github.NewClient(nil).WithAuthToken(githubPat)
 
 	// todo what can be cached // how to refresh cache
-	// notes: older deployments can't be updated?
+	// notes: older deployments can't be updated, only deleted
 	deployments, _, _ := client.Repositories.ListDeployments(ctx, owner, repo, &github.DeploymentsListOptions{
 		SHA:         "",
 		Ref:         "",
