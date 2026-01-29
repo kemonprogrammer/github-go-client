@@ -59,7 +59,6 @@ func main() {
 			return
 		}
 
-		//fmt.Printf("Head and base differ by %d commits:\n", commitCmp.GetTotalCommits())
 		for _, c := range commitCmp.Commits {
 			fmt.Printf("+ %s\n", GetTitle(c.Commit.GetMessage()))
 		}
