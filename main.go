@@ -8,6 +8,33 @@ import (
 	"strings"
 )
 
+type Response struct {
+	deployments []Deployment
+}
+
+type Deployment struct {
+	tmpD github.Deployment
+	tmpC github.Commit
+
+	// deployment
+	ID            *int64            `json:"id,omitempty"`
+	DeploymentUrl *string           `json:"deployment_url,omitempty"`
+	SHA           *string           `json:"sha,omitempty"`
+	CreatedAt     *github.Timestamp `json:"created_at,omitempty"`
+	UpdatedAt     *github.Timestamp `json:"updated_at,omitempty"`
+
+	// commits
+	ComparisonUrl  *string
+	CommitsAdded   []DeploymentCommit
+	CommitsRemoved []DeploymentCommit
+}
+
+type DeploymentCommit struct {
+	SHA   *string `json:"sha,omitempty"`
+	Title *string `json:"title,omitempty"`
+	URL   *string `json:"url,omitempty"`
+}
+
 func main() {
 	if strings.ToUpper(os.Getenv("TEST")) == "TRUE" {
 		return
@@ -59,7 +86,6 @@ func main() {
 			return
 		}
 
-		//fmt.Printf("Head and base differ by %d commits:\n", commitCmp.GetTotalCommits())
 		for _, c := range commitCmp.Commits {
 			fmt.Printf("+ %s\n", GetTitle(c.Commit.GetMessage()))
 		}
