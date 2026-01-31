@@ -16,7 +16,11 @@ type GithubService struct {
 	ghDeployments []*github.Deployment
 }
 
-func (gs *GithubService) loadDeployments() ([]*deployment.Deployment, error) {
+func (gs *GithubService) loadDeployments() ([]*github.Deployment, error) {
+	// todo extend cache with time range
+	if len(gs.ghDeployments) > 0 {
+		return gs.ghDeployments, nil
+	}
 
 	ghDeployments, _, err := gs.Client.Repositories.ListDeployments(
 		gs.Context, gs.Repo.Owner, gs.Repo.Name, &github.DeploymentsListOptions{
@@ -31,42 +35,27 @@ func (gs *GithubService) loadDeployments() ([]*deployment.Deployment, error) {
 		return nil, fmt.Errorf("error while fetching github ghDeployments: %s", err)
 	}
 	gs.ghDeployments = ghDeployments
-
-	deployments := make([]*deployment.Deployment, 0, len(ghDeployments))
-	for _, d := range ghDeployments {
-		deployments = append(deployments, toDeployment(d))
-	}
-	return deployments, nil
+	return gs.ghDeployments, nil
 }
 
 func (gs *GithubService) ListDeployments() ([]*deployment.Deployment, error) {
-	if len(gs.ghDeployments) == 0 {
-		_, err := gs.loadDeployments()
-		if err != nil {
-			return nil, err
-		}
+	ghDeployments, err := gs.loadDeployments()
+	if err != nil {
+		return nil, err
 	}
-	deployments := make([]*deployment.Deployment, 0, len(gs.ghDeployments))
-	for _, d := range gs.ghDeployments {
-		deployments = append(deployments, toDeployment(d))
-	}
-	return deployments, nil
+	return toDeployments(ghDeployments), nil
 }
 
 func (gs *GithubService) ListDeploymentsInRange(from, to time.Time) ([]*deployment.Deployment, error) {
-	if len(gs.ghDeployments) == 0 {
-		_, err := gs.loadDeployments()
-		if err != nil {
-			return nil, err
-		}
+	// todo handle deployment not in range
+	ghDeployments, err := gs.loadDeployments()
+	if err != nil {
+		return nil, err
 	}
-	deployments := make([]*deployment.Deployment, 0, len(gs.ghDeployments))
-	for _, d := range gs.ghDeployments {
-		deployments = append(deployments, toDeployment(d))
-	}
+	deployments := toDeployments(ghDeployments)
 
-	inTimeDeploys := FilterTimerange(deployments, from, to)
-	successfulDeploys, err := gs.FilterSuccessful(inTimeDeploys)
+	inTimeDeploys := filterTimerange(deployments, from, to)
+	successfulDeploys, err := gs.filterSuccessful(inTimeDeploys)
 	if err != nil {
 		return nil, err
 	}
@@ -131,22 +120,23 @@ func (gs *GithubService) FillWithCommits(deployments []*deployment.Deployment) e
 			d.CommitsAdded = make([]deployment.Commit, 0)
 			d.CommitsRemoved = make([]deployment.Commit, 0)
 		}
-
 	}
 
 	return nil
 }
 
 func toCommits(commitCmp *github.CommitsComparison) []deployment.Commit {
-	commits := make([]deployment.Commit, 0, commitCmp.GetTotalCommits())
-	for _, commit := range commitCmp.Commits {
-		commits = append(commits, toCommit(commit))
+	commits := make([]deployment.Commit, commitCmp.GetTotalCommits())
+	for i, commit := range commitCmp.Commits {
+		commits[i] = toCommit(commit)
 	}
 	return commits
 }
 
 func toDeployment(githubDeploy *github.Deployment) *deployment.Deployment {
-
+	if githubDeploy == nil {
+		return nil
+	}
 	return &deployment.Deployment{
 		ID:             githubDeploy.ID,
 		DeploymentUrl:  githubDeploy.URL,
@@ -159,6 +149,14 @@ func toDeployment(githubDeploy *github.Deployment) *deployment.Deployment {
 	}
 }
 
+func toDeployments(ghDeployments []*github.Deployment) []*deployment.Deployment {
+	deployments := make([]*deployment.Deployment, len(ghDeployments))
+	for i, d := range ghDeployments {
+		deployments[i] = toDeployment(d)
+	}
+	return deployments
+}
+
 func toCommit(commit *github.RepositoryCommit) deployment.Commit {
 	return deployment.Commit{
 		SHA:   commit.GetSHA(), // sha somehow stored in commit, now commit.Commit
@@ -167,8 +165,7 @@ func toCommit(commit *github.RepositoryCommit) deployment.Commit {
 	}
 }
 
-func (gs *GithubService) FilterSuccessful(deployments []*deployment.Deployment) ([]*deployment.Deployment, error) {
-
+func (gs *GithubService) filterSuccessful(deployments []*deployment.Deployment) ([]*deployment.Deployment, error) {
 	result := make([]*deployment.Deployment, 0, len(deployments))
 
 	for _, d := range deployments {
@@ -193,7 +190,7 @@ func (gs *GithubService) FilterSuccessful(deployments []*deployment.Deployment) 
 	return result, nil
 }
 
-func FilterTimerange(deployments []*deployment.Deployment, from time.Time, to time.Time) []*deployment.Deployment {
+func filterTimerange(deployments []*deployment.Deployment, from time.Time, to time.Time) []*deployment.Deployment {
 	filteredDeploys := make([]*deployment.Deployment, 0, len(deployments))
 	for _, d := range deployments {
 		if d.GetCreatedAt().After(from) && d.GetCreatedAt().Before(to) {
