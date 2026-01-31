@@ -3,36 +3,39 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/google/go-github/v81/github"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/google/go-github/v81/github"
+	"github.com/kemonprogrammer/github-go-client/deployment"
+	"github.com/kemonprogrammer/github-go-client/githubClient"
 )
 
 type Response struct {
-	deployments []Deployment
+	deployments []deployment.Deployment
 }
 
-type Deployment struct {
-	tmpD github.Deployment
-	tmpC github.Commit
-
-	// deployment
-	ID            *int64            `json:"id,omitempty"`
-	DeploymentUrl *string           `json:"deployment_url,omitempty"`
-	SHA           *string           `json:"sha,omitempty"`
-	CreatedAt     *github.Timestamp `json:"created_at,omitempty"`
-	UpdatedAt     *github.Timestamp `json:"updated_at,omitempty"`
-
-	// commits
-	ComparisonUrl  *string
-	CommitsAdded   []DeploymentCommit
-	CommitsRemoved []DeploymentCommit
+type Params struct {
+	From, To time.Time
 }
 
-type DeploymentCommit struct {
-	SHA   *string `json:"sha,omitempty"`
-	Title *string `json:"title,omitempty"`
-	URL   *string `json:"url,omitempty"`
+func fillParams(from, to string) (*Params, error) {
+	//dateTimeFormat := "2006-01-02T00:00:00Z"
+	dateFrom, err := time.Parse(time.RFC3339, from)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't parse date from %s, %s", from, err)
+	}
+	dateTo, err := time.Parse(time.RFC3339, to)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't parse date to %s, %s", from, err)
+	}
+	params := &Params{
+		From: dateFrom,
+		To:   dateTo,
+	}
+	//fmt.Printf("params: %v", params)
+	return params, nil
 }
 
 func main() {
@@ -47,75 +50,45 @@ func main() {
 	env := os.Getenv("ENVIRONMENT")
 	ctx := context.Background()
 	client := github.NewClient(nil).WithAuthToken(githubPat)
+	queryFrom := os.Getenv("FROM")
+	queryTo := os.Getenv("TO")
+
+	params, err := fillParams(queryFrom, queryTo)
+
+	//t, _ :=time.Parse("2025-09-11", "2026-01-29")
+	//ghT := github.Timestamp{ t}
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	deploymentService := githubClient.GithubService{
+		Client: client,
+		Repo: deployment.Repo{
+			Owner:       owner,
+			Name:        repo,
+			Environment: env,
+		},
+		Context: ctx,
+	}
 
 	// todo what can be cached // how to refresh cache
 	// notes: older deployments can't be updated, only deleted
-	deployments, _, _ := client.Repositories.ListDeployments(ctx, owner, repo, &github.DeploymentsListOptions{
-		SHA:         "",
-		Ref:         "",
-		Task:        "",
-		Environment: env,
-		ListOptions: github.ListOptions{}, // todo handle more than 30 deployments (default)
-	})
-	fmt.Printf("len deploys: %d", len(deployments))
-
-	successfulDeployments, err := FilterSuccessful(client, ctx, owner, repo, deployments)
+	deployments, err := deploymentService.ListDeploymentsInRange(params.From, params.To)
 	if err != nil {
 		fmt.Println(err)
 	}
+	fmt.Printf("len deploys: %d", len(deployments))
 
-	for i, d := range successfulDeployments {
-		fmt.Printf("\nDeployment %d:\n", d.GetID())
-
-		fmt.Printf("sha: %s\n", d.GetSHA())
-		fmt.Printf("created at: %s\n", d.GetCreatedAt())
-
-		if len(successfulDeployments) < 2 || i+1 >= len(successfulDeployments) {
-			continue
-		}
-		head := successfulDeployments[i].GetSHA()
-		base := successfulDeployments[i+1].GetSHA()
-
-		commitCmp, _, err := client.Repositories.CompareCommits(ctx, owner, repo, base, head, &github.ListOptions{
-			Page:    0,
-			PerPage: 10, // todo handle more than 10 commits -> maybe "61 more commits\n<compare-url>"
-		})
-
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		for _, c := range commitCmp.Commits {
-			fmt.Printf("+ %s\n", GetTitle(c.Commit.GetMessage()))
-		}
+	err = deploymentService.FillWithCommits(deployments)
+	if err != nil {
+		fmt.Println(err)
 	}
+	fmt.Printf("\ndeployments response: %+v", deployments)
 }
 
-func GetTitle(message string) string {
-	return strings.Split(message, "\n")[0]
-}
+type DeploymentService interface {
 
-func FilterSuccessful(client *github.Client, ctx context.Context, owner, repo string, deployments []*github.Deployment) ([]*github.Deployment, error) {
-	result := make([]*github.Deployment, 0, len(deployments))
-
-	for _, d := range deployments {
-		if d.ID == nil {
-			continue
-		}
-
-		statuses, _, err := client.Repositories.ListDeploymentStatuses(ctx, owner, repo, d.GetID(), &github.ListOptions{
-			PerPage: 10,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get deployment statuses for %d: %w", d.GetID(), err)
-		}
-		for _, status := range statuses {
-			if status.GetState() == "success" {
-				result = append(result, d)
-				break
-			}
-		}
-	}
-	return result, nil
+	//	todo add cache
 }
