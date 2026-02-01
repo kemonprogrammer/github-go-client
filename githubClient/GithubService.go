@@ -47,7 +47,6 @@ func (gs *GithubService) ListDeployments() ([]*deployment.Deployment, error) {
 }
 
 func (gs *GithubService) ListDeploymentsInRange(from, to time.Time) ([]*deployment.Deployment, error) {
-	// todo handle deployment not in range
 	ghDeployments, err := gs.loadDeployments()
 	if err != nil {
 		return nil, err
@@ -60,7 +59,31 @@ func (gs *GithubService) ListDeploymentsInRange(from, to time.Time) ([]*deployme
 		return nil, err
 	}
 
-	return successfulDeploys, nil
+	// fetch one deployment before first in time range to compare it to first in deployment in time range
+	beforeTimeDeploys := filterTimerange(deployments, from.Add(-time.Duration(24)*time.Hour), from)
+	index := -1
+	for i, d := range beforeTimeDeploys {
+		statuses, _, err := gs.Client.Repositories.ListDeploymentStatuses(gs.Context, gs.Repo.Owner, gs.Repo.Name, d.GetID(), &github.ListOptions{
+			PerPage: 10,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get deployment statuses for %d: %w", d.GetID(), err)
+		}
+
+		for _, status := range statuses {
+			if status.GetState() == "success" {
+				index = i
+				break
+			}
+		}
+	}
+	// todo repeat load previous Deployments until index = -1
+	// if none other don't add it (means that this is the first deployment)
+
+	if index == -1 {
+		return successfulDeploys, nil
+	}
+	return append(successfulDeploys, beforeTimeDeploys[index]), nil
 }
 
 func (gs *GithubService) FillWithCommits(deployments []*deployment.Deployment) error {
