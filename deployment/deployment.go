@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-type Repo struct {
-	Owner       string `json:"owner,omitempty"`
-	Name        string `json:"name,omitempty"`
-	Environment string `json:"environment,omitempty"`
-}
-
 type Deployment struct {
 	// deployment
 	ID        int64     `json:"id"`
@@ -65,9 +59,4 @@ func (c *Commit) String() string {
 		c.Title,
 		c.URL,
 	)
-}
-
-func ParseCommitTitle(message string) string {
-	title, _, _ := strings.Cut(message, "\n")
-	return title
 }

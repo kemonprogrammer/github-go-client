@@ -1,6 +1,8 @@
 package gh
 
 import (
+	"strings"
+
 	"github.com/google/go-github/v81/github"
 	"github.com/kemonprogrammer/github-go-client/deployment"
 )
@@ -40,7 +42,12 @@ func toDeployments(ghDeployments []*github.Deployment) []*deployment.Deployment 
 func toCommit(commit *github.RepositoryCommit) *deployment.Commit {
 	return &deployment.Commit{
 		SHA:   commit.GetSHA(), // sha somehow stored in commit, not commit.Commit
-		Title: deployment.ParseCommitTitle(commit.Commit.GetMessage()),
+		Title: ParseCommitTitle(commit.Commit.GetMessage()),
 		URL:   commit.Commit.GetURL(),
 	}
+}
+
+func ParseCommitTitle(message string) string {
+	title, _, _ := strings.Cut(message, "\n")
+	return title
 }
