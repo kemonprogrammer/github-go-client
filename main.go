@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/go-github/v81/github"
 	"github.com/kemonprogrammer/github-go-client/deployment"
-	"github.com/kemonprogrammer/github-go-client/githubClient"
+	"github.com/kemonprogrammer/github-go-client/gh"
 )
 
 type Response struct {
@@ -60,13 +60,15 @@ func main() {
 		return
 	}
 
-	deploymentService := githubClient.GithubService{
-		Client: &githubClient.GithubRepositoryClient{
-			Client:      client,
-			Repo:        repo,
-			Owner:       owner,
-			Environment: env,
-		},
+	ghRepo, err := gh.NewGithubRepository(client, owner, repo, env)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	deploymentService, err := gh.NewService(ghRepo)
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
 
 	// todo what can be cached // how to refresh cache
