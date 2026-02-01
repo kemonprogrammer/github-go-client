@@ -61,24 +61,23 @@ func main() {
 	}
 
 	deploymentService := githubClient.GithubService{
-		Client: &githubClient.GithubClient{
+		Client: &githubClient.GithubRepositoryClient{
 			Client:      client,
 			Repo:        repo,
 			Owner:       owner,
 			Environment: env,
 		},
-		Context: ctx,
 	}
 
 	// todo what can be cached // how to refresh cache
 	// notes: older deployments can't be updated, only deleted
-	deployments, err := deploymentService.ListDeploymentsInRange(params.From, params.To)
+	deployments, err := deploymentService.ListDeploymentsInRange(ctx, params.From, params.To)
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Printf("len deploys: %d", len(deployments))
 
-	err = deploymentService.FillWithCommits(deployments)
+	err = deploymentService.FillWithCommits(ctx, deployments)
 	if err != nil {
 		fmt.Println(err)
 	}

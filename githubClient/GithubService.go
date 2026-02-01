@@ -11,7 +11,6 @@ import (
 
 type GithubService struct {
 	Client        RepositoryClient
-	Context       context.Context
 	ghDeployments []*github.Deployment
 }
 
@@ -22,12 +21,12 @@ type RepositoryClient interface {
 }
 
 // maybe rename
-type GithubClient struct {
+type GithubRepositoryClient struct {
 	Client                   *github.Client
 	Repo, Owner, Environment string
 }
 
-func (gc *GithubClient) ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, error) {
+func (gc *GithubRepositoryClient) ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, error) {
 	if opts == nil {
 		opts = &github.DeploymentsListOptions{
 			Environment: gc.Environment,
@@ -41,60 +40,77 @@ func (gc *GithubClient) ListDeployments(ctx context.Context, opts *github.Deploy
 	return deploys, err
 }
 
-func (gc *GithubClient) ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error) {
+func (gc *GithubRepositoryClient) ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error) {
 	deploys, _, err := gc.Client.Repositories.ListDeploymentStatuses(ctx, gc.Owner, gc.Repo, id, opts)
 	return deploys, err
 }
 
-func (gc *GithubClient) CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error) {
+func (gc *GithubRepositoryClient) CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error) {
+	if opts == nil {
+		opts = &github.ListOptions{
+			// todo handle more than 30 commits  (default) -> maybe "<first 7 commits> 24 more commits\n<compare-url>"
+		}
+	}
 	deploys, _, err := gc.Client.Repositories.CompareCommits(ctx, gc.Owner, gc.Repo, base, head, opts)
 	return deploys, err
 }
 
-func (gs *GithubService) loadDeployments() ([]*github.Deployment, error) {
+func (gs *GithubService) loadDeployments(ctx context.Context) ([]*github.Deployment, error) {
 	// todo extend cache with time range
 	if len(gs.ghDeployments) > 0 {
 		return gs.ghDeployments, nil
 	}
 
-	ghDeployments, err := gs.Client.ListDeployments(
-		gs.Context, nil)
+	ghDeployments, err := gs.Client.ListDeployments(ctx, nil)
 	if err != nil {
-		fmt.Println(err)
-		return nil, fmt.Errorf("error while fetching github ghDeployments: %s", err)
+		return nil, fmt.Errorf("error while fetching github ghDeployments: %w", err)
 	}
 	gs.ghDeployments = ghDeployments
 	return gs.ghDeployments, nil
 }
 
-func (gs *GithubService) ListDeployments() ([]*deployment.Deployment, error) {
-	ghDeployments, err := gs.loadDeployments()
+func (gs *GithubService) ListDeployments(ctx context.Context) ([]*deployment.Deployment, error) {
+	ghDeployments, err := gs.loadDeployments(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return toDeployments(ghDeployments), nil
 }
 
-func (gs *GithubService) ListDeploymentsInRange(from, to time.Time) ([]*deployment.Deployment, error) {
-	ghDeployments, err := gs.loadDeployments()
+func (gs *GithubService) ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*deployment.Deployment, error) {
+	ghDeployments, err := gs.loadDeployments(ctx)
 	if err != nil {
 		return nil, err
 	}
-	deployments := toDeployments(ghDeployments)
+	allDeploys := toDeployments(ghDeployments)
 
-	inTimeDeploys := filterTimerange(deployments, from, to)
-	successfulDeploys, err := gs.filterSuccessful(inTimeDeploys)
+	inRange := filterTimerange(allDeploys, from, to)
+	successful, err := gs.filterSuccessful(ctx, inRange)
 	if err != nil {
 		return nil, err
 	}
 
 	// fetch one deployment before first in time range to compare it to first in deployment in time range
-	beforeTimeDeploys := filterTimerange(deployments, from.Add(-time.Duration(24)*time.Hour), from)
+	prevSuccessful, err := gs.findLatestSuccessfulBefore(ctx, allDeploys, from)
+	if err != nil {
+		return nil, err
+	}
+
+	if prevSuccessful != nil {
+		return append(successful, prevSuccessful), nil
+	}
+	return successful, nil
+}
+
+// todo repeat load previous Deployments until index = -1
+// if none other don't add it (means that this is the first deployment)
+func (gs *GithubService) findLatestSuccessfulBefore(
+	ctx context.Context, deploys []*deployment.Deployment, from time.Time) (*deployment.Deployment, error) {
+
+	prevDeploys := filterTimerange(deploys, from.Add(-time.Duration(24)*time.Hour), from)
 	index := -1
-	for i, d := range beforeTimeDeploys {
-		statuses, err := gs.Client.ListDeploymentStatuses(gs.Context, d.GetID(), &github.ListOptions{
-			PerPage: 10,
-		})
+	for i, d := range prevDeploys {
+		statuses, err := gs.Client.ListDeploymentStatuses(ctx, d.GetID(), nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get deployment statuses for %d: %w", d.GetID(), err)
 		}
@@ -106,71 +122,48 @@ func (gs *GithubService) ListDeploymentsInRange(from, to time.Time) ([]*deployme
 			}
 		}
 	}
-	// todo repeat load previous Deployments until index = -1
-	// if none other don't add it (means that this is the first deployment)
-
 	if index == -1 {
-		return successfulDeploys, nil
+		return nil, nil
 	}
-	return append(successfulDeploys, beforeTimeDeploys[index]), nil
+	return prevDeploys[index], nil
 }
 
-func (gs *GithubService) FillWithCommits(deployments []*deployment.Deployment) error {
+func (gs *GithubService) FillWithCommits(ctx context.Context, deployments []*deployment.Deployment) error {
 	for i, d := range deployments {
-		fmt.Printf("\nDeployment %d:\n", d.GetID())
-
-		fmt.Printf("sha: %s\n", d.GetSHA())
-		fmt.Printf("created at: %s\n", d.GetCreatedAt())
-
 		if len(deployments) < 2 || i+1 >= len(deployments) {
 			continue
 		}
+
 		head := deployments[i].GetSHA()
 		base := deployments[i+1].GetSHA()
 
-		commitCmp, err := gs.Client.CompareCommits(gs.Context, base, head, &github.ListOptions{
-			// todo handle more than 30 commits  (default) -> maybe "<first 7 commits> 24 more commits\n<compare-url>"
-		})
+		commitCmp, err := gs.Client.CompareCommits(ctx, base, head, nil)
 
 		if err != nil {
-			return fmt.Errorf("error while comparing commits %s", err)
+			return fmt.Errorf("error while comparing commits %w", err)
 		}
 
-		// to string method
-		for _, c := range commitCmp.Commits {
-			fmt.Printf("+ %s\n", deployment.GetTitle(c.Commit.GetMessage()))
-		}
-
-		// * pseudo *
-		// if status == "ahead" skip
-
-		// else if status == "diverged"
-		// 1. add commits to addedCommits
-		// 1. call compareCommits() with mergeBaseSha...baseSha
-		// 1. add commits to removedCommits
-
-		// else if status == "behind"
-		// 1. add all commits to removedCommits
-		if commitCmp.GetStatus() == "ahead" {
+		switch status := commitCmp.GetStatus(); status {
+		case "ahead":
 			d.CommitsAdded = toCommits(commitCmp)
-			d.CommitsRemoved = make([]*deployment.Commit, 0)
 
-		} else if commitCmp.GetStatus() == "behind" {
-			d.CommitsAdded = make([]*deployment.Commit, 0)
+		case "behind":
 			d.CommitsRemoved = toCommits(commitCmp)
 
-		} else if commitCmp.GetStatus() == "diverged" {
+		case "diverged":
 			d.CommitsAdded = toCommits(commitCmp)
-			mergeBase := commitCmp.GetMergeBaseCommit().GetSHA()
-			divergedCommitCmp, err := gs.Client.CompareCommits(gs.Context, mergeBase, base, &github.ListOptions{})
-			if err != nil {
-				return fmt.Errorf("error while comparing commits %s", err)
-			}
-			d.CommitsRemoved = toCommits(divergedCommitCmp)
 
-		} else if commitCmp.GetStatus() == "identical" {
-			d.CommitsAdded = make([]*deployment.Commit, 0)
-			d.CommitsRemoved = make([]*deployment.Commit, 0)
+			mergeBase := commitCmp.GetMergeBaseCommit().GetSHA()
+			divergedCmp, err := gs.Client.CompareCommits(ctx, mergeBase, base, &github.ListOptions{})
+			if err != nil {
+				return fmt.Errorf("comparing diverged commits: %w", err)
+			}
+			d.CommitsRemoved = toCommits(divergedCmp)
+
+		case "identical":
+			// No action needed if slices are already nil or empty
+		default:
+			return fmt.Errorf("unexpected commit status: %s", status)
 		}
 	}
 
@@ -217,15 +210,15 @@ func toCommit(commit *github.RepositoryCommit) *deployment.Commit {
 	}
 }
 
-func (gs *GithubService) filterSuccessful(deployments []*deployment.Deployment) ([]*deployment.Deployment, error) {
-	result := make([]*deployment.Deployment, 0, len(deployments))
+func (gs *GithubService) filterSuccessful(ctx context.Context, deployments []*deployment.Deployment) ([]*deployment.Deployment, error) {
+	successful := make([]*deployment.Deployment, 0, len(deployments))
 
 	for _, d := range deployments {
 		if d.ID == nil {
 			continue
 		}
 
-		statuses, err := gs.Client.ListDeploymentStatuses(gs.Context, d.GetID(), &github.ListOptions{
+		statuses, err := gs.Client.ListDeploymentStatuses(ctx, d.GetID(), &github.ListOptions{
 			PerPage: 10,
 		})
 
@@ -234,20 +227,20 @@ func (gs *GithubService) filterSuccessful(deployments []*deployment.Deployment) 
 		}
 		for _, status := range statuses {
 			if status.GetState() == "success" {
-				result = append(result, d)
+				successful = append(successful, d)
 				break
 			}
 		}
 	}
-	return result, nil
+	return successful, nil
 }
 
 func filterTimerange(deployments []*deployment.Deployment, from time.Time, to time.Time) []*deployment.Deployment {
-	filteredDeploys := make([]*deployment.Deployment, 0, len(deployments))
+	filtered := make([]*deployment.Deployment, 0, len(deployments))
 	for _, d := range deployments {
 		if d.GetCreatedAt().After(from) && d.GetCreatedAt().Before(to) {
-			filteredDeploys = append(filteredDeploys, d)
+			filtered = append(filtered, d)
 		}
 	}
-	return filteredDeploys
+	return filtered
 }

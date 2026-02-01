@@ -55,13 +55,20 @@ func (d *Deployment) String() string {
 		return "<nil>"
 	}
 
+	commitsStr := ""
+	for _, commit := range d.CommitsAdded {
+		commitsStr += fmt.Sprintf("+ %s", commit.Title)
+	}
+	for _, commit := range d.CommitsRemoved {
+		commitsStr += fmt.Sprintf("- %s", commit.Title)
+	}
+
 	return fmt.Sprintf(
-		"Deployment(id: %d, sha: %q, created: %v, commits: +%v/-%v)",
+		"Deployment(id: %d, sha: %q, created: %v, commits: %s)",
 		d.GetID(),
 		d.GetSHA(),
 		d.GetCreatedAt(),
-		d.CommitsAdded,
-		d.CommitsRemoved,
+		commitsStr,
 	)
 }
 
