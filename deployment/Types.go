@@ -20,9 +20,9 @@ type Deployment struct {
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 
 	// commits
-	ComparisonUrl  *string  `json:"comparison_url,omitempty"`
-	CommitsAdded   []Commit `json:"commits_added,omitempty"`
-	CommitsRemoved []Commit `json:"commits_removed,omitempty"`
+	ComparisonUrl  *string   `json:"comparison_url,omitempty"`
+	CommitsAdded   []*Commit `json:"commits_added,omitempty"`
+	CommitsRemoved []*Commit `json:"commits_removed,omitempty"`
 }
 
 // GetID returns the ID field if it's non-nil, zero value otherwise.
@@ -50,23 +50,35 @@ func (d *Deployment) GetCreatedAt() time.Time {
 	return *d.CreatedAt
 }
 
-type Commit struct {
-	SHA   string `json:"sha,omitempty"`
-	Title string `json:"title,omitempty"`
-	URL   string `json:"url,omitempty"`
-}
-
 func (d *Deployment) String() string {
 	if d == nil {
 		return "<nil>"
 	}
 
 	return fmt.Sprintf(
-		"Deployment(id: %d, sha: %q, created: %v, commits: +%d/-%d)",
+		"Deployment(id: %d, sha: %q, created: %v, commits: +%v/-%v)",
 		d.GetID(),
 		d.GetSHA(),
 		d.GetCreatedAt(),
-		len(d.CommitsAdded),
-		len(d.CommitsRemoved),
+		d.CommitsAdded,
+		d.CommitsRemoved,
+	)
+}
+
+type Commit struct {
+	SHA   string `json:"sha,omitempty"`
+	Title string `json:"title,omitempty"`
+	URL   string `json:"url,omitempty"`
+}
+
+func (c *Commit) String() string {
+	if c == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf(
+		"Commit(sha: %q, title: %s, url: %s",
+		c.SHA,
+		c.Title,
+		c.URL,
 	)
 }

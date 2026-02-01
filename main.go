@@ -55,19 +55,16 @@ func main() {
 
 	params, err := fillParams(queryFrom, queryTo)
 
-	//t, _ :=time.Parse("2025-09-11", "2026-01-29")
-	//ghT := github.Timestamp{ t}
-
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	deploymentService := githubClient.GithubService{
-		Client: client,
-		Repo: deployment.Repo{
+		Client: &githubClient.GithubClient{
+			Client:      client,
+			Repo:        repo,
 			Owner:       owner,
-			Name:        repo,
 			Environment: env,
 		},
 		Context: ctx,
@@ -86,9 +83,4 @@ func main() {
 		fmt.Println(err)
 	}
 	fmt.Printf("\ndeployments response: %+v", deployments)
-}
-
-type DeploymentService interface {
-
-	//	todo add cache
 }

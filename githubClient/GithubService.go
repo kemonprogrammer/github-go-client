@@ -10,10 +10,45 @@ import (
 )
 
 type GithubService struct {
-	Repo          deployment.Repo
-	Client        *github.Client
+	Client        RepositoryClient
 	Context       context.Context
 	ghDeployments []*github.Deployment
+}
+
+type RepositoryClient interface {
+	ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, error)
+	ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error)
+	CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error)
+}
+
+// maybe rename
+type GithubClient struct {
+	Client                   *github.Client
+	Repo, Owner, Environment string
+}
+
+func (gc *GithubClient) ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, error) {
+	if opts == nil {
+		opts = &github.DeploymentsListOptions{
+			Environment: gc.Environment,
+			//SHA:         "",
+			//Ref:         "",
+			//Task:        "",
+			//ListOptions: github.ListOptions{}, // todo handle more than 30 ghDeployments (default)
+		}
+	}
+	deploys, _, err := gc.Client.Repositories.ListDeployments(ctx, gc.Owner, gc.Repo, opts)
+	return deploys, err
+}
+
+func (gc *GithubClient) ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error) {
+	deploys, _, err := gc.Client.Repositories.ListDeploymentStatuses(ctx, gc.Owner, gc.Repo, id, opts)
+	return deploys, err
+}
+
+func (gc *GithubClient) CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error) {
+	deploys, _, err := gc.Client.Repositories.CompareCommits(ctx, gc.Owner, gc.Repo, base, head, opts)
+	return deploys, err
 }
 
 func (gs *GithubService) loadDeployments() ([]*github.Deployment, error) {
@@ -22,14 +57,8 @@ func (gs *GithubService) loadDeployments() ([]*github.Deployment, error) {
 		return gs.ghDeployments, nil
 	}
 
-	ghDeployments, _, err := gs.Client.Repositories.ListDeployments(
-		gs.Context, gs.Repo.Owner, gs.Repo.Name, &github.DeploymentsListOptions{
-			Environment: gs.Repo.Environment,
-			//SHA:         "",
-			//Ref:         "",
-			//Task:        "",
-			//ListOptions: github.ListOptions{}, // todo handle more than 30 ghDeployments (default)
-		})
+	ghDeployments, err := gs.Client.ListDeployments(
+		gs.Context, nil)
 	if err != nil {
 		fmt.Println(err)
 		return nil, fmt.Errorf("error while fetching github ghDeployments: %s", err)
@@ -63,7 +92,7 @@ func (gs *GithubService) ListDeploymentsInRange(from, to time.Time) ([]*deployme
 	beforeTimeDeploys := filterTimerange(deployments, from.Add(-time.Duration(24)*time.Hour), from)
 	index := -1
 	for i, d := range beforeTimeDeploys {
-		statuses, _, err := gs.Client.Repositories.ListDeploymentStatuses(gs.Context, gs.Repo.Owner, gs.Repo.Name, d.GetID(), &github.ListOptions{
+		statuses, err := gs.Client.ListDeploymentStatuses(gs.Context, d.GetID(), &github.ListOptions{
 			PerPage: 10,
 		})
 		if err != nil {
@@ -99,7 +128,7 @@ func (gs *GithubService) FillWithCommits(deployments []*deployment.Deployment) e
 		head := deployments[i].GetSHA()
 		base := deployments[i+1].GetSHA()
 
-		commitCmp, _, err := gs.Client.Repositories.CompareCommits(gs.Context, gs.Repo.Owner, gs.Repo.Name, base, head, &github.ListOptions{
+		commitCmp, err := gs.Client.CompareCommits(gs.Context, base, head, &github.ListOptions{
 			// todo handle more than 30 commits  (default) -> maybe "<first 7 commits> 24 more commits\n<compare-url>"
 		})
 
@@ -124,32 +153,32 @@ func (gs *GithubService) FillWithCommits(deployments []*deployment.Deployment) e
 		// 1. add all commits to removedCommits
 		if commitCmp.GetStatus() == "ahead" {
 			d.CommitsAdded = toCommits(commitCmp)
-			d.CommitsRemoved = make([]deployment.Commit, 0)
+			d.CommitsRemoved = make([]*deployment.Commit, 0)
 
 		} else if commitCmp.GetStatus() == "behind" {
-			d.CommitsAdded = make([]deployment.Commit, 0)
+			d.CommitsAdded = make([]*deployment.Commit, 0)
 			d.CommitsRemoved = toCommits(commitCmp)
 
 		} else if commitCmp.GetStatus() == "diverged" {
 			d.CommitsAdded = toCommits(commitCmp)
 			mergeBase := commitCmp.GetMergeBaseCommit().GetSHA()
-			divergedCommitCmp, _, err := gs.Client.Repositories.CompareCommits(gs.Context, gs.Repo.Owner, gs.Repo.Name, mergeBase, base, &github.ListOptions{})
+			divergedCommitCmp, err := gs.Client.CompareCommits(gs.Context, mergeBase, base, &github.ListOptions{})
 			if err != nil {
 				return fmt.Errorf("error while comparing commits %s", err)
 			}
 			d.CommitsRemoved = toCommits(divergedCommitCmp)
 
 		} else if commitCmp.GetStatus() == "identical" {
-			d.CommitsAdded = make([]deployment.Commit, 0)
-			d.CommitsRemoved = make([]deployment.Commit, 0)
+			d.CommitsAdded = make([]*deployment.Commit, 0)
+			d.CommitsRemoved = make([]*deployment.Commit, 0)
 		}
 	}
 
 	return nil
 }
 
-func toCommits(commitCmp *github.CommitsComparison) []deployment.Commit {
-	commits := make([]deployment.Commit, commitCmp.GetTotalCommits())
+func toCommits(commitCmp *github.CommitsComparison) []*deployment.Commit {
+	commits := make([]*deployment.Commit, commitCmp.GetTotalCommits())
 	for i, commit := range commitCmp.Commits {
 		commits[i] = toCommit(commit)
 	}
@@ -180,8 +209,8 @@ func toDeployments(ghDeployments []*github.Deployment) []*deployment.Deployment 
 	return deployments
 }
 
-func toCommit(commit *github.RepositoryCommit) deployment.Commit {
-	return deployment.Commit{
+func toCommit(commit *github.RepositoryCommit) *deployment.Commit {
+	return &deployment.Commit{
 		SHA:   commit.GetSHA(), // sha somehow stored in commit, now commit.Commit
 		Title: commit.Commit.GetMessage(),
 		URL:   commit.Commit.GetURL(),
@@ -196,7 +225,7 @@ func (gs *GithubService) filterSuccessful(deployments []*deployment.Deployment) 
 			continue
 		}
 
-		statuses, _, err := gs.Client.Repositories.ListDeploymentStatuses(gs.Context, gs.Repo.Owner, gs.Repo.Name, d.GetID(), &github.ListOptions{
+		statuses, err := gs.Client.ListDeploymentStatuses(gs.Context, d.GetID(), &github.ListOptions{
 			PerPage: 10,
 		})
 
