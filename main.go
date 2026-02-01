@@ -24,11 +24,11 @@ func fillParams(from, to string) (*Params, error) {
 	//dateTimeFormat := "2006-01-02T00:00:00Z"
 	dateFrom, err := time.Parse(time.RFC3339, from)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't parse date from %s, %s", from, err)
+		return nil, fmt.Errorf("couldn't parse date from %s, %w", from, err)
 	}
 	dateTo, err := time.Parse(time.RFC3339, to)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't parse date to %s, %s", from, err)
+		return nil, fmt.Errorf("couldn't parse date to %s, %w", from, err)
 	}
 	params := &Params{
 		From: dateFrom,

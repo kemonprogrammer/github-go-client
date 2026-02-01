@@ -178,16 +178,16 @@ func toCommits(commitCmp *github.CommitsComparison) []*deployment.Commit {
 	return commits
 }
 
-func toDeployment(githubDeploy *github.Deployment) *deployment.Deployment {
-	if githubDeploy == nil {
+func toDeployment(ghDeploy *github.Deployment) *deployment.Deployment {
+	if ghDeploy == nil {
 		return nil
 	}
 	return &deployment.Deployment{
-		ID:             githubDeploy.ID,
-		DeploymentUrl:  githubDeploy.URL,
-		SHA:            githubDeploy.SHA,
-		CreatedAt:      githubDeploy.CreatedAt.GetTime(),
-		UpdatedAt:      githubDeploy.UpdatedAt.GetTime(),
+		ID:             ghDeploy.ID,
+		DeploymentUrl:  ghDeploy.URL,
+		SHA:            ghDeploy.SHA,
+		CreatedAt:      ghDeploy.CreatedAt.GetTime(),
+		UpdatedAt:      ghDeploy.UpdatedAt.GetTime(),
 		ComparisonUrl:  nil,
 		CommitsAdded:   nil,
 		CommitsRemoved: nil,
@@ -204,8 +204,8 @@ func toDeployments(ghDeployments []*github.Deployment) []*deployment.Deployment 
 
 func toCommit(commit *github.RepositoryCommit) *deployment.Commit {
 	return &deployment.Commit{
-		SHA:   commit.GetSHA(), // sha somehow stored in commit, now commit.Commit
-		Title: commit.Commit.GetMessage(),
+		SHA:   commit.GetSHA(), // sha somehow stored in commit, not commit.Commit
+		Title: deployment.GetTitle(commit.Commit.GetMessage()),
 		URL:   commit.Commit.GetURL(),
 	}
 }
@@ -221,10 +221,10 @@ func (gs *GithubService) filterSuccessful(ctx context.Context, deployments []*de
 		statuses, err := gs.Client.ListDeploymentStatuses(ctx, d.GetID(), &github.ListOptions{
 			PerPage: 10,
 		})
-
 		if err != nil {
 			return nil, fmt.Errorf("failed to get deployment statuses for %d: %w", d.GetID(), err)
 		}
+
 		for _, status := range statuses {
 			if status.GetState() == "success" {
 				successful = append(successful, d)
