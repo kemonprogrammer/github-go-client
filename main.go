@@ -77,11 +77,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Printf("len deploys: %d", len(deployments))
+	fmt.Printf("len deploys: %d\n", len(deployments))
 
-	err = deploymentService.FillWithCommits(ctx, deployments)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Printf("\ndeployments response: %+v", deployments)
+	fmt.Printf("deployments response: %+v", deployments)
 }

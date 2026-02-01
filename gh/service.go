@@ -23,20 +23,6 @@ func NewService(repo Repository) (*Service, error) {
 	}, nil
 }
 
-func (gs *Service) loadDeployments(ctx context.Context) ([]*github.Deployment, error) {
-	// todo extend cache with time range
-	if len(gs.ghDeployments) > 0 {
-		return gs.ghDeployments, nil
-	}
-
-	ghDeployments, err := gs.repo.ListDeployments(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error while fetching github ghDeployments: %w", err)
-	}
-	gs.ghDeployments = ghDeployments
-	return gs.ghDeployments, nil
-}
-
 func (gs *Service) ListDeployments(ctx context.Context) ([]*deployment.Deployment, error) {
 	ghDeployments, err := gs.loadDeployments(ctx)
 	if err != nil {
@@ -63,11 +49,31 @@ func (gs *Service) ListDeploymentsInRange(ctx context.Context, from, to time.Tim
 	if err != nil {
 		return nil, err
 	}
-
 	if prevSuccessful != nil {
-		return append(successful, prevSuccessful), nil
+		successful = append(successful, prevSuccessful)
 	}
-	return successful, nil
+
+	populated, err := gs.fillWithCommits(ctx, successful)
+	if err != nil {
+		return nil, err
+	}
+
+	inRange = populated[:len(populated)-1]
+	return inRange, nil
+}
+
+func (gs *Service) loadDeployments(ctx context.Context) ([]*github.Deployment, error) {
+	// todo extend cache with time range
+	if len(gs.ghDeployments) > 0 {
+		return gs.ghDeployments, nil
+	}
+
+	ghDeployments, err := gs.repo.ListDeployments(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error while fetching github ghDeployments: %w", err)
+	}
+	gs.ghDeployments = ghDeployments
+	return gs.ghDeployments, nil
 }
 
 // todo repeat load previous Deployments until index = -1
@@ -96,19 +102,22 @@ func (gs *Service) findLatestSuccessfulBefore(
 	return prevDeploys[index], nil
 }
 
-func (gs *Service) FillWithCommits(ctx context.Context, deployments []*deployment.Deployment) error {
+func (gs *Service) fillWithCommits(ctx context.Context, deployments []*deployment.Deployment) ([]*deployment.Deployment, error) {
+	if len(deployments) < 2 {
+		return deployments, nil
+	}
+
 	for i, d := range deployments {
-		if len(deployments) < 2 || i+1 >= len(deployments) {
-			continue
+		if i+1 >= len(deployments) {
+			break
 		}
 
 		head := deployments[i].SHA
 		base := deployments[i+1].SHA
 
 		commitCmp, err := gs.repo.CompareCommits(ctx, base, head, nil)
-
 		if err != nil {
-			return fmt.Errorf("error while comparing commits %w", err)
+			return nil, fmt.Errorf("error while comparing commits %w", err)
 		}
 
 		switch status := commitCmp.GetStatus(); status {
@@ -124,18 +133,18 @@ func (gs *Service) FillWithCommits(ctx context.Context, deployments []*deploymen
 			mergeBase := commitCmp.GetMergeBaseCommit().GetSHA()
 			divergedCmp, err := gs.repo.CompareCommits(ctx, mergeBase, base, &github.ListOptions{})
 			if err != nil {
-				return fmt.Errorf("comparing diverged commits: %w", err)
+				return nil, fmt.Errorf("comparing diverged commits: %w", err)
 			}
 			d.Removed = toCommits(divergedCmp)
 
 		case "identical":
 			// No action needed if slices are already nil or empty
 		default:
-			return fmt.Errorf("unexpected commit status: %s", status)
+			return nil, fmt.Errorf("unexpected commit status: %s", status)
 		}
 	}
 
-	return nil
+	return deployments, nil
 }
 
 func (gs *Service) filterSuccessful(ctx context.Context, deployments []*deployment.Deployment) ([]*deployment.Deployment, error) {
