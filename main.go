@@ -53,8 +53,15 @@ func main() {
 	queryFrom := os.Getenv("FROM")
 	queryTo := os.Getenv("TO")
 
-	params, err := fillParams(queryFrom, queryTo)
+	user, resp, err := client.Users.Get(context.Background(), "")
+	if err == nil {
+		// GitHub returns the version used in the 'X-GitHub-Api-Version' header
+		actualVersion := resp.Header.Get("X-GitHub-Api-Version")
+		fmt.Printf("user: %s\n", *user.Login)
+		fmt.Printf("API Version used by server: %s\n", actualVersion)
+	}
 
+	params, err := fillParams(queryFrom, queryTo)
 	if err != nil {
 		fmt.Println(err)
 		return

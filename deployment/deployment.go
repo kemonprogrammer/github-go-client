@@ -34,11 +34,12 @@ func (d *Deployment) String() string {
 	}
 
 	return fmt.Sprintf(
-		"Deployment(\n id: %d,\n deployUrl: %s,\n sha: %q,\n created: %v,\n commits: \n%s)\n",
+		"Deployment(\n id: %d,\n deployUrl: %s,\n sha: %q,\n created: %v,\n comp URL: %s,\n commits: \n%s)\n",
 		d.ID,
 		d.URL,
 		d.SHA,
 		d.CreatedAt,
+		d.ComparisonURL,
 		sb.String(),
 	)
 }

@@ -120,6 +120,8 @@ func (gs *Service) fillWithCommits(ctx context.Context, deployments []*deploymen
 			return nil, fmt.Errorf("error while comparing commits %w", err)
 		}
 
+		d.ComparisonURL = commitCmp.GetHTMLURL()
+
 		switch status := commitCmp.GetStatus(); status {
 		case "ahead":
 			d.Added = toCommits(commitCmp)
