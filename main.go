@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/google/go-github/v81/github"
-	"github.com/kemonprogrammer/github-go-client/deployment"
-	"github.com/kemonprogrammer/github-go-client/gh"
+	"github.com/kemonprogrammer/github-go-client/external_deployments"
+	"github.com/kemonprogrammer/github-go-client/external_deployments/gh"
 )
 
 type Response struct {
-	deployments []deployment.Deployment
+	deployments []external_deployments.Deployment
 }
 
 type Params struct {
