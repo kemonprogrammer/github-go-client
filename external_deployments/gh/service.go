@@ -58,7 +58,11 @@ func (gs *Service) ListDeploymentsInRange(ctx context.Context, from, to time.Tim
 		return nil, err
 	}
 
-	inRange = populated[:len(populated)-1]
+	if len(populated) >= 1 {
+		inRange = populated[:len(populated)-1]
+	} else {
+		inRange = populated
+	}
 	return inRange, nil
 }
 
@@ -119,8 +123,6 @@ func (gs *Service) fillWithCommits(ctx context.Context, deployments []*external_
 		if err != nil {
 			return nil, fmt.Errorf("error while comparing commits %w", err)
 		}
-
-		d.ComparisonURL = commitCmp.GetHTMLURL()
 
 		switch status := commitCmp.GetStatus(); status {
 		case "ahead":

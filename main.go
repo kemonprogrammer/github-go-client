@@ -45,7 +45,9 @@ func main() {
 
 	// setup github
 	owner := os.Getenv("OWNER")
-	repo := "github-go-client"
+	workload := os.Getenv("WORKLOAD")
+	repo := findRepoFromWorkload(workload)
+	//repo := "github-go-client"
 	githubPat := os.Getenv("GITHUB_PAT")
 	env := os.Getenv("ENVIRONMENT")
 	ctx := context.Background()
@@ -87,4 +89,8 @@ func main() {
 	fmt.Printf("len deploys: %d\n", len(deployments))
 
 	fmt.Printf("deployments response: %+v", deployments)
+}
+
+func findRepoFromWorkload(workload string) string {
+	return ""
 }
