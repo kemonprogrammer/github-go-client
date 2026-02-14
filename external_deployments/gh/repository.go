@@ -8,7 +8,7 @@ import (
 )
 
 type Repository interface {
-	ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, error)
+	ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error)
 	ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error)
 	CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error)
 }
@@ -29,18 +29,12 @@ func NewGithubRepository(client *github.Client, owner, repo, environment string)
 	}, nil
 }
 
-func (gc *GithubRepository) ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, error) {
-	if opts == nil {
-		opts = &github.DeploymentsListOptions{
-			Environment: gc.environment,
-			//SHA:         "",
-			//Ref:         "",
-			//Task:        "",
-			//ListOptions: github.ListOptions{}, // todo handle more than 30 ghDeployments (default)
-		}
+func (gc *GithubRepository) ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error) {
+	if opts.Environment == "" {
+		opts.Environment = gc.environment
 	}
-	deploys, _, err := gc.client.Repositories.ListDeployments(ctx, gc.owner, gc.repo, opts)
-	return deploys, err
+	deploys, resp, err := gc.client.Repositories.ListDeployments(ctx, gc.owner, gc.repo, opts)
+	return deploys, resp, err
 }
 
 func (gc *GithubRepository) ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error) {
@@ -49,11 +43,11 @@ func (gc *GithubRepository) ListDeploymentStatuses(ctx context.Context, id int64
 }
 
 func (gc *GithubRepository) CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error) {
-	if opts == nil {
-		opts = &github.ListOptions{
-			// todo handle more than 30 commits  (default) -> maybe "<first 7 commits> 24 more commits\n<compare-url>"
-		}
-	}
 	deploys, _, err := gc.client.Repositories.CompareCommits(ctx, gc.owner, gc.repo, base, head, opts)
 	return deploys, err
+}
+
+func (gc *GithubRepository) ListRepositories(ctx context.Context, opts *github.RepositoryListByAuthenticatedUserOptions) ([]*github.Repository, *github.Response, error) {
+	repos, resp, err := gc.client.Repositories.ListByAuthenticatedUser(ctx, opts)
+	return repos, resp, err
 }

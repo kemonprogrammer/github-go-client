@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -52,30 +51,23 @@ func main() {
 	ctx := context.Background()
 	client := github.NewClient(nil).WithAuthToken(githubPat)
 
-	owner := os.Getenv("OWNER")
-
 	// params
 	workload := os.Getenv("WORKLOAD")
-	user, resp, err := client.Users.Get(ctx, "")
+	user, _, err := client.Users.Get(ctx, "")
 	if err != nil {
 		fmt.Println(err)
 		return
+	}
+	owner := user.GetLogin()
+	repo := extractRepoName(workload)
+	_, _, err = client.Repositories.Get(ctx, owner, repo)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println(fmt.Errorf("no repository found for workload %s", workload))
 	}
 
 	// GitHub returns the version used in the 'X-GitHub-Api-Version' header
-	actualVersion := resp.Header.Get("X-GitHub-Api-Version")
 	fmt.Printf("user: %s\n", *user.Login)
-	fmt.Printf("API Version used by server: %s\n", actualVersion)
-
-	repoService := NewRepoService(client, user.GetLogin())
-
-	repo, err := repoService.findRepoFromWorkload(ctx, workload)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Repo found: %s\n", repo)
 
 	//repo := "github-go-client"
 	queryFrom := os.Getenv("FROM")
@@ -107,59 +99,6 @@ func main() {
 	fmt.Printf("len deploys: %d\n", len(deployments))
 
 	fmt.Printf("deployments response: %+v", deployments)
-}
-
-func (rs *RepoService) findRepoFromWorkload(ctx context.Context, workload string) (string, error) {
-	repoName := extractRepoName(workload)
-	allRepos := make([]*github.Repository, 0)
-
-	page := 1
-
-	for page > 0 {
-		repos, resp, err := rs.client.Repositories.ListByAuthenticatedUser(ctx, &github.RepositoryListByAuthenticatedUserOptions{
-			Visibility:  "all",
-			Affiliation: "",
-			Type:        "",
-			Sort:        "",
-			Direction:   "",
-			ListOptions: github.ListOptions{
-				Page:    page,
-				PerPage: 30,
-			},
-		})
-		if err != nil {
-			return "", err
-		}
-
-		allRepos = append(allRepos, repos...)
-
-		fmt.Printf("page %d\n", page)
-		for _, repo := range allRepos {
-			fmt.Printf("repo: %s\n", repo.GetName())
-		}
-
-		page = resp.NextPage
-	}
-
-	for _, repo := range allRepos {
-		if repo.GetName() == repoName {
-			return repo.GetName(), nil
-		}
-	}
-
-	return "", errors.New("No repo found for workload " + workload)
-}
-
-type RepoService struct {
-	client *github.Client
-	user   string
-}
-
-func NewRepoService(client *github.Client, user string) RepoService {
-	return RepoService{
-		client: client,
-		user:   user,
-	}
 }
 
 func extractRepoName(workload string) string {

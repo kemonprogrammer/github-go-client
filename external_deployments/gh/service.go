@@ -66,21 +66,38 @@ func (gs *Service) ListDeploymentsInRange(ctx context.Context, from, to time.Tim
 	return inRange, nil
 }
 
+// loadDeployments loads all deployments on the first time and stores them in cache
 func (gs *Service) loadDeployments(ctx context.Context) ([]*github.Deployment, error) {
-	// todo extend cache with time range
+	// todo extend cache with newest deployment
 	if len(gs.ghDeployments) > 0 {
 		return gs.ghDeployments, nil
 	}
 
-	ghDeployments, err := gs.repo.ListDeployments(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error while fetching github ghDeployments: %w", err)
+	var allDeploys []*github.Deployment
+	opts := &github.DeploymentsListOptions{
+		ListOptions: github.ListOptions{Page: 1},
 	}
-	gs.ghDeployments = ghDeployments
+
+	for opts.ListOptions.Page > 0 {
+		deploys, resp, err := gs.repo.ListDeployments(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("error while fetching github ghDeployments: %w", err)
+		}
+
+		allDeploys = append(allDeploys, deploys...)
+
+		if resp.Rate.Remaining <= 10 {
+			return nil, fmt.Errorf("rate limit nearly exhausted, only 10 calls remaining; resets at %v",
+				resp.Rate.Reset)
+		}
+
+		opts.ListOptions.Page = resp.NextPage
+	}
+
+	gs.ghDeployments = allDeploys
 	return gs.ghDeployments, nil
 }
 
-// todo repeat load previous Deployments until index = -1
 // if none other don't add it (means that this is the first deployment)
 func (gs *Service) findLatestSuccessfulBefore(
 	ctx context.Context, deploys []*external_deployments.Deployment, from time.Time) (*external_deployments.Deployment, error) {
@@ -107,7 +124,8 @@ func (gs *Service) findLatestSuccessfulBefore(
 }
 
 func (gs *Service) fillWithCommits(ctx context.Context, deployments []*external_deployments.Deployment) ([]*external_deployments.Deployment, error) {
-	if len(deployments) < 2 {
+	// If there are no deployments to compare it to
+	if len(deployments) <= 1 {
 		return deployments, nil
 	}
 
