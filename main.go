@@ -59,8 +59,8 @@ func main() {
 		return
 	}
 	owner := user.GetLogin()
-	repo := extractRepoName(workload)
-	_, _, err = client.Repositories.Get(ctx, owner, repo)
+	repoName := extractRepoName(workload)
+	_, _, err = client.Repositories.Get(ctx, owner, repoName)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println(fmt.Errorf("no repository found for workload %s", workload))
@@ -69,7 +69,6 @@ func main() {
 	// GitHub returns the version used in the 'X-GitHub-Api-Version' header
 	fmt.Printf("user: %s\n", *user.Login)
 
-	//repo := "github-go-client"
 	queryFrom := os.Getenv("FROM")
 	queryTo := os.Getenv("TO")
 
@@ -79,12 +78,12 @@ func main() {
 		return
 	}
 
-	ghRepo, err := gh.NewGithubRepository(client, owner, repo, env)
+	ghRepo, err := gh.NewGithubRepository(client, owner, repoName, env)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	deploymentService, err := gh.NewService(ghRepo)
+	deploymentService, err := gh.NewGithubDeploymentService(ghRepo)
 	if err != nil {
 		fmt.Println(err)
 		return
