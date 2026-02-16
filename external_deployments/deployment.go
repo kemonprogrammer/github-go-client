@@ -8,11 +8,12 @@ import (
 
 type Deployment struct {
 	// deployment
-	ID        int64     `json:"id"`
-	URL       string    `json:"url"`
-	SHA       string    `json:"sha"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          int64     `json:"id"`
+	URL         string    `json:"url"`
+	SHA         string    `json:"sha"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	SucceededAt time.Time `json:"succeeded_at"`
 
 	// commits
 	ComparisonURL string    `json:"comparison_url"`
@@ -34,11 +35,11 @@ func (d *Deployment) String() string {
 	}
 
 	return fmt.Sprintf(
-		"Deployment(\n id: %d,\n deployUrl: %s,\n sha: %q,\n created: %v,\n commits: \n%s)\n",
+		"Deployment(\n id: %d,\n deployUrl: %s,\n sha: %q,\n succeeded: %v,\n commits: \n%s)\n",
 		d.ID,
 		d.URL,
 		d.SHA,
-		d.CreatedAt,
+		d.SucceededAt,
 		sb.String(),
 	)
 }
