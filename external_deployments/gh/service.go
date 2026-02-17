@@ -39,12 +39,16 @@ func (gs *GithubDeploymentService) ListDeployments(ctx context.Context) ([]*exte
 }
 
 // loadSuccessfulDeploymentsInRange
+//
+// Pseudocode:
+//
 // load deployments
 // filter deploys: from after updated at and to is before created at
 // if not in successfulDeployments
 //   - fetch deployment status
-//   - if successful put into successfulDeployments (sort each time)
+//   - if status successful present put into successfulDeployments
 //
+// before updating cache sort the deployments by succeededAt
 // filter successful deployments in time range
 func (gs *GithubDeploymentService) loadSuccessfulDeploymentsInRange(ctx context.Context, from, to time.Time) error {
 	if err := gs.loadDeployments(ctx); err != nil {
@@ -83,9 +87,10 @@ func (gs *GithubDeploymentService) loadSuccessfulDeploymentsInRange(ctx context.
 
 // ListDeploymentsInRange
 //
-// **Assumption**: list of deployments ordered by succeededAt is append-only, since it deploying an application only adds a deployment status with the current date and not a past date
+// **Assumption**: list of deployments ordered by succeededAt is append-only time-wise, because deploying an application
+// only adds a deployment status with the current date and not any past date
 //
-// When creating Deployment statuses manually, the date also can't be set</p>
+// When creating deployment statuses manually, the date also can't be set
 func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error) {
 
 	err := gs.loadSuccessfulDeploymentsInRange(ctx, from, to)
@@ -100,15 +105,19 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 	// get the one deployment before `from` to compare it to the first inside time range
 	// assumption: if there is a successful deployment before `from` it has to have been loaded during `loadSuccessful...InRange`
 	// **proof**:
-	//  - A1: there has to be one deployment at each time, starting from the first deployment
+	//  - A1: deployments have createdAt, succeededAt and an updatedAt timestamp. If a deployment A is the first deployment,
+	//        it will succeed at timestamp t1, then have updatedAt at timestamp t2, where t1 <= t2. If A is not the first deployment
+	//        but A0 is, then once A is deployed after A0, the succeededAt timestamp is set to tA, and will cause the updatedAt timestamp
+	//        of A0 to be tA0, where tA <= tA0
+	//  - A2: from A1 follows: there has to be one deployment at each time, starting from the first deployment
 	//        so combining all succeededAt to updatedAt timespans fills the whole time there was an active deployment
-	//  - A2: the updatedAt of an older deployment is always set at the time or after a newer deployment succeeded
-	//  - A3: the elements inside gs.successfulDeployments are sorted by succeededAt date from newest to oldest
+	//  - A3: the updatedAt of an older deployment is always set at the time or after a newer deployment succeeded
+	//  - A4: the elements inside gs.successfulDeployments are sorted by succeededAt date from newest to oldest
 	//  - defining d := the first successful deployment before `from`
-	//    we know that d must have updatedAt after `from`, because of A1 and A2
+	//    we know that d must have updatedAt after `from`, because of A2 and A3
 	//    therefore we know that d also was loaded in `loadSuccessful...InRange`, because of how it's implemented
 	//    therefore it must be included in gs.successfulDeployments
-	//    because of A3 it must be the first deployment found before `from`
+	//    because of A4 it must be the first deployment found before `from`
 
 	var oneBefore *external_deployments.Deployment
 	for _, sd := range gs.successfulDeployments {
@@ -285,6 +294,7 @@ func filterTimerangeBySucceededAt(deployments []*external_deployments.Deployment
 	return filtered
 }
 
+// filterTimerangeBySuccessPossible filters deployments which could have a succeeded in the timeframe
 func filterTimerangeBySuccessPossible(deployments []*external_deployments.Deployment, from time.Time, to time.Time) []*external_deployments.Deployment {
 	filtered := make([]*external_deployments.Deployment, 0, len(deployments))
 	for _, d := range deployments {
@@ -295,7 +305,7 @@ func filterTimerangeBySuccessPossible(deployments []*external_deployments.Deploy
 	return filtered
 }
 
-// populateSuccessStatus assumption: deployment status: x -> success -> inactive
+// populateSuccessStatus assumption: deployment status states: x -> success -> inactive
 func (gs *GithubDeploymentService) populateSuccessStatus(ctx context.Context, deploys []*external_deployments.Deployment) ([]*external_deployments.Deployment, error) {
 	successful := make([]*external_deployments.Deployment, 0, len(deploys))
 
