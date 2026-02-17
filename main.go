@@ -97,26 +97,20 @@ func main() {
 	// setup github
 	githubPat := os.Getenv("GITHUB_PAT")
 	env := os.Getenv("ENVIRONMENT")
+	owner := os.Getenv("OWNER")
 	ctx := context.Background()
 	client := github.NewClient(nil).WithAuthToken(githubPat)
 
 	// params
 	workload := os.Getenv("WORKLOAD")
-	user, _, err := client.Users.Get(ctx, "")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	owner := user.GetLogin()
 	repoName := extractRepoName(workload)
-	_, _, err = client.Repositories.Get(ctx, owner, repoName)
+	_, _, err := client.Repositories.Get(ctx, owner, repoName)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println(fmt.Errorf("no repository found for workload %s", workload))
 	}
 
-	// GitHub returns the version used in the 'X-GitHub-Api-Version' header
-	fmt.Printf("user: %s\n", *user.Login)
+	fmt.Printf("owner: %s\n", owner)
 
 	ghRepo, err := gh.NewGithubRepository(client, owner, repoName, env)
 	if err != nil {
