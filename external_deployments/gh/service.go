@@ -102,22 +102,30 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 
 	inRange := filterTimerangeBySucceededAt(successful, from, to)
 
-	// get the one deployment before `from` to compare it to the first inside time range
-	// assumption: if there is a successful deployment before `from` it has to have been loaded during `loadSuccessful...InRange`
-	// **proof**:
-	//  - A1: deployments have createdAt, succeededAt and an updatedAt timestamp. If a deployment A is the first deployment,
-	//        it will succeed at timestamp t1, then have updatedAt at timestamp t2, where t1 <= t2. If A is not the first deployment
-	//        but A0 is, then once A is deployed after A0, the succeededAt timestamp is set to tA, and will cause the updatedAt timestamp
-	//        of A0 to be tA0, where tA <= tA0
-	//  - A2: from A1 follows: there has to be one deployment at each time, starting from the first deployment
-	//        so combining all succeededAt to updatedAt timespans fills the whole time there was an active deployment
-	//  - A3: the updatedAt of an older deployment is always set at the time or after a newer deployment succeeded
-	//  - A4: the elements inside gs.successfulDeployments are sorted by succeededAt date from newest to oldest
-	//  - defining d := the first successful deployment before `from`
-	//    we know that d must have updatedAt after `from`, because of A2 and A3
-	//    therefore we know that d also was loaded in `loadSuccessful...InRange`, because of how it's implemented
-	//    therefore it must be included in gs.successfulDeployments
-	//    because of A4 it must be the first deployment found before `from`
+	/*
+	 * PROOF: Existence and Retrieval of the active deployment 'd' before 'from'.
+	 *
+	 * Definitions:
+	 * - s (succeededAt): The start of a deployment's active period.
+	 * - u (updatedAt): The end of a deployment's active period (when it was superseded).
+	 *
+	 * 1. Invariant (Temporal Continuity): For any two sequential deployments D_n and D_{n+1},
+	 * u_n >= s_{n+1}. This ensures the timeline is a continuous partition; there are no gaps
+	 * without an active deployment.
+	 *
+	 * 2. Invariant (Monotonicity): GitHub's append-only nature guarantees that the
+	 * sequence of SucceededAt timestamps is non-decreasing.
+	 *
+	 * 3. Range Inclusion: loadSuccessfulDeploymentsInRange fetches all deployments
+	 * where the interval [s, u] overlaps with [from, to]. Since Continuity (1)
+	 * guarantees a deployment 'd' exists such that d.s <= from <= d.u, 'd'
+	 * is guaranteed to be present in gs.successfulDeployments.
+	 *
+	 * 4. Completeness: Because gs.successfulDeployments is sorted by SucceededAt DESC,
+	 * the first deployment 'sd' encountered where sd.SucceededAt < from is
+	 * mathematically guaranteed to be the deployment 'd' that was active at
+	 * the 'from' boundary.
+	 */
 
 	var oneBefore *external_deployments.Deployment
 	for _, sd := range gs.successfulDeployments {
