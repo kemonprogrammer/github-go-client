@@ -97,7 +97,19 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 
 	inRange := filterTimerangeBySucceededAt(successful, from, to)
 
-	// get one before to compare it to the first inside time range
+	// get the one deployment before `from` to compare it to the first inside time range
+	// assumption: if there is a successful deployment before `from` it has to have been loaded during `loadSuccessful...InRange`
+	// **proof**:
+	//  - A1: there has to be one deployment at each time, starting from the first deployment
+	//        so combining all succeededAt to updatedAt timespans fills the whole time there was an active deployment
+	//  - A2: the updatedAt of an older deployment is always set at the time or after a newer deployment succeeded
+	//  - A3: the elements inside gs.successfulDeployments are sorted by succeededAt date from newest to oldest
+	//  - defining d := the first successful deployment before `from`
+	//    we know that d must have updatedAt after `from`, because of A1 and A2
+	//    therefore we know that d also was loaded in `loadSuccessful...InRange`, because of how it's implemented
+	//    therefore it must be included in gs.successfulDeployments
+	//    because of A3 it must be the first deployment found before `from`
+
 	var oneBefore *external_deployments.Deployment
 	for _, sd := range gs.successfulDeployments {
 		if sd.SucceededAt.Before(from) {
