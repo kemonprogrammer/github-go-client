@@ -11,7 +11,6 @@ type Repository interface {
 	ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error)
 	ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error)
 	CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error)
-	ListWorkflowRuns(ctx context.Context, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error)
 }
 type GithubRepository struct {
 	client                   *github.Client
@@ -28,11 +27,6 @@ func NewGithubRepository(client *github.Client, owner, name, environment string)
 		name:        name,
 		environment: environment,
 	}, nil
-}
-
-func (gc *GithubRepository) ListWorkflowRuns(ctx context.Context, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
-	runs, resp, err := gc.client.Actions.ListRepositoryWorkflowRuns(ctx, gc.owner, gc.name, opts)
-	return runs, resp, err
 }
 
 func (gc *GithubRepository) ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error) {
