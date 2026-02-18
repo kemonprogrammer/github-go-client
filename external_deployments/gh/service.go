@@ -85,12 +85,7 @@ func (gs *GithubDeploymentService) loadSuccessfulDeploymentsInRange(ctx context.
 	return nil
 }
 
-// ListDeploymentsInRange
-//
-// **Assumption**: list of deployments ordered by succeededAt is append-only time-wise, because deploying an application
-// only adds a deployment status with the current date and not any past date
-//
-// When creating deployment statuses manually, the date also can't be set
+// ListDeploymentsInRange lists deployments with a deployment status successful in range [from, to]
 func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error) {
 
 	err := gs.loadSuccessfulDeploymentsInRange(ctx, from, to)
@@ -135,7 +130,7 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 		}
 	}
 
-	populated, err := gs.fillWithCommits(ctx, append(inRange, oneBefore))
+	populated, err := gs.populateWithCommits(ctx, append(inRange, oneBefore))
 	if err != nil {
 		return nil, err
 	}
@@ -221,16 +216,14 @@ func (gs *GithubDeploymentService) loadDeployments(ctx context.Context) error {
 	return nil
 }
 
-func (gs *GithubDeploymentService) fillWithCommits(ctx context.Context, deployments []*external_deployments.Deployment) ([]*external_deployments.Deployment, error) {
+func (gs *GithubDeploymentService) populateWithCommits(ctx context.Context, deployments []*external_deployments.Deployment) ([]*external_deployments.Deployment, error) {
 	// If there are no deployments to compare it to
 	if len(deployments) <= 1 {
 		return deployments, nil
 	}
 
-	for i, d := range deployments {
-		if i+1 >= len(deployments) {
-			break
-		}
+	for i := range len(deployments) - 1 {
+		d := deployments[i]
 
 		head := deployments[i].SHA
 		base := deployments[i+1].SHA
@@ -239,6 +232,8 @@ func (gs *GithubDeploymentService) fillWithCommits(ctx context.Context, deployme
 		if err != nil {
 			return nil, fmt.Errorf("error while comparing commits %w", err)
 		}
+
+		d.ComparisonURL = commitCmp.GetHTMLURL()
 
 		switch status := commitCmp.GetStatus(); status {
 		case "ahead":
