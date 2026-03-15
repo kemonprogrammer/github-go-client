@@ -165,14 +165,14 @@ func callHttpEndpoint(ctx context.Context, config *Config, workload string, depl
 		return
 	}
 
-	newerDeployments, err := deploymentService.ListDeploymentsInRange(ctx, from, to)
+	newerDeployments, err := deploymentService.ListDeploymentsInRange(ctx, repoName, from, to)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	fmt.Printf("len newer deploys: %d\n", len(newerDeployments))
 	fmt.Printf("newer deployments response: %+v\n", newerDeployments)
-	newerDeployments, err = deploymentService.ListDeploymentsInRange(ctx, from, to)
+	newerDeployments, err = deploymentService.ListDeploymentsInRange(ctx, repoName, from, to)
 	if err != nil {
 		fmt.Println(err)
 		return

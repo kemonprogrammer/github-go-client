@@ -17,12 +17,6 @@ type Repository interface {
 type GithubRepository struct {
 	client                   *github.Client
 	name, owner, environment string
-	commitCache              map[compareKey]*github.CommitsComparison
-}
-
-type compareKey struct {
-	Base string
-	Head string
 }
 
 func NewGithubRepository(client *github.Client, owner, name, environment string) (Repository, error) {
@@ -34,7 +28,6 @@ func NewGithubRepository(client *github.Client, owner, name, environment string)
 		owner:       owner,
 		name:        name,
 		environment: environment,
-		commitCache: make(map[compareKey]*github.CommitsComparison),
 	}, nil
 }
 
@@ -62,17 +55,11 @@ func (gc *GithubRepository) ListDeploymentStatuses(ctx context.Context, id int64
 }
 
 func (gc *GithubRepository) CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error) {
-	key := compareKey{Base: base, Head: head}
-	if res, found := gc.commitCache[key]; found {
-		return res, nil
-	}
-
 	fmt.Printf("TRACE CompareCommits\n")
 	commitCmp, _, err := gc.client.Repositories.CompareCommits(ctx, gc.owner, gc.name, base, head, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	gc.commitCache[key] = commitCmp
 	return commitCmp, err
 }

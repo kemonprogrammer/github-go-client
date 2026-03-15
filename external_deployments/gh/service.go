@@ -17,7 +17,7 @@ type GithubDeploymentService struct {
 }
 
 type DeploymentService interface {
-	ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error)
+	ListDeploymentsInRange(ctx context.Context, repoName string, from, to time.Time) ([]*external_deployments.Deployment, error)
 	ValidateRepo(ctx context.Context, repo string) error
 }
 
@@ -101,7 +101,7 @@ func (gs *GithubDeploymentService) cleanCache() {
 }
 
 // ListDeploymentsInRange lists deployments with a deployment status successful in range [from, to]
-func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error) {
+func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, repoName string, from, to time.Time) ([]*external_deployments.Deployment, error) {
 	defer gs.cleanCache()
 
 	err := gs.loadSuccessfulDeploymentsInRange(ctx, from, to)
