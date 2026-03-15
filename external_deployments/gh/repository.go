@@ -8,6 +8,7 @@ import (
 )
 
 type Repository interface {
+	GetRepository(ctx context.Context, repoName string) (*github.Repository, *github.Response, error)
 	ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error)
 	ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error)
 	CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error)
@@ -35,6 +36,14 @@ func NewGithubRepository(client *github.Client, owner, name, environment string)
 		environment: environment,
 		commitCache: make(map[compareKey]*github.CommitsComparison),
 	}, nil
+}
+
+func (gc *GithubRepository) GetRepository(ctx context.Context, repoName string) (*github.Repository, *github.Response, error) {
+	repo, resp, err := gc.client.Repositories.Get(ctx, gc.owner, repoName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return repo, resp, nil
 }
 
 func (gc *GithubRepository) ListDeployments(ctx context.Context, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error) {

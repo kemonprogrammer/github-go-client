@@ -18,6 +18,7 @@ type GithubDeploymentService struct {
 
 type DeploymentService interface {
 	ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error)
+	ValidateRepo(ctx context.Context, repo string) error
 }
 
 func NewGithubDeploymentService(repo Repository) (*GithubDeploymentService, error) {
@@ -37,6 +38,14 @@ func (gs *GithubDeploymentService) ListDeployments(ctx context.Context) ([]*exte
 		return nil, err
 	}
 	return toDeployments(gs.ghDeployments), nil
+}
+
+func (gs *GithubDeploymentService) ValidateRepo(ctx context.Context, repo string) error {
+	_, _, err := gs.repo.GetRepository(ctx, repo)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // loadSuccessfulDeploymentsInRange

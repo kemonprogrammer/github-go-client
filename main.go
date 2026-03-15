@@ -93,35 +93,53 @@ func main() {
 		fmt.Println(cache)
 		return
 	}
+	cfg := SetupConfig()
+	deploymentService := SetupServices(cfg)
 
+	workload := os.Getenv("WORKLOAD")
+	callHttpEndpoint(context.Background(), cfg, workload, deploymentService)
+}
+
+func SetupConfig() *Config {
 	// setup github
+	return &Config{
+		owner: os.Getenv("OWNER"),
+		env:   os.Getenv("ENVIRONMENT"),
+	}
+}
+
+func SetupServices(cfg *Config) gh.DeploymentService {
 	githubPat := os.Getenv("GITHUB_PAT")
-	env := os.Getenv("ENVIRONMENT")
-	owner := os.Getenv("OWNER")
-	ctx := context.Background()
 	client := github.NewClient(nil).WithAuthToken(githubPat)
+	ghRepo, err := gh.NewGithubRepository(client, cfg.owner, "", cfg.env)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	deploymentService, err := gh.NewGithubDeploymentService(ghRepo)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	return deploymentService
+}
+
+type Config struct {
+	owner string
+	env   string
+}
+
+func callHttpEndpoint(ctx context.Context, config *Config, workload string, deploymentService gh.DeploymentService) {
+	owner := config.owner
 
 	// params
-	workload := os.Getenv("WORKLOAD")
 	repoName := extractRepoName(workload)
-	_, _, err := client.Repositories.Get(ctx, owner, repoName)
-	if err != nil {
+	if err := deploymentService.ValidateRepo(ctx, repoName); err != nil {
 		fmt.Println(err)
 		fmt.Println(fmt.Errorf("no repository found for workload %s", workload))
 	}
 
 	fmt.Printf("owner: %s\n", owner)
-
-	ghRepo, err := gh.NewGithubRepository(client, owner, repoName, env)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	deploymentService, err := gh.NewGithubDeploymentService(ghRepo)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 
 	//queryFrom := os.Getenv("FROM")
 	//queryTo := os.Getenv("TO")
