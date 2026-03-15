@@ -22,6 +22,7 @@ type Deployment struct {
 	Removed       []*Commit `json:"removed"`
 }
 
+// shadowDeployment struct to print zero timestamps as "" in JSON
 type shadowDeployment struct {
 	// deployment
 	ID          int64      `json:"id"`

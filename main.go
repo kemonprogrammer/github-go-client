@@ -123,15 +123,15 @@ func main() {
 		return
 	}
 
-	queryFrom := os.Getenv("FROM")
-	queryTo := os.Getenv("TO")
-
-	_, err = fillParams(queryFrom, queryTo)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
+	//queryFrom := os.Getenv("FROM")
+	//queryTo := os.Getenv("TO")
+	//
+	//params, err := fillParams(queryFrom, queryTo)
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
+	//
 	//deployments, err := deploymentService.ListDeploymentsInRange(ctx, params.From, params.To)
 	//if err != nil {
 	//	fmt.Println(err)
@@ -154,6 +154,12 @@ func main() {
 	}
 	fmt.Printf("len newer deploys: %d\n", len(newerDeployments))
 	fmt.Printf("newer deployments response: %+v\n", newerDeployments)
+	newerDeployments, err = deploymentService.ListDeploymentsInRange(ctx, from, to)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("2nd time to test cache: deployments response: %+v\n", newerDeployments)
 }
 
 func extractRepoName(workload string) string {

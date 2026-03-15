@@ -30,6 +30,7 @@ func NewGithubDeploymentService(repo Repository) (*GithubDeploymentService, erro
 }
 
 func (gs *GithubDeploymentService) ListDeployments(ctx context.Context) ([]*external_deployments.Deployment, error) {
+	defer gs.cleanCache()
 	err := gs.loadDeployments(ctx)
 
 	if err != nil {
@@ -85,8 +86,14 @@ func (gs *GithubDeploymentService) loadSuccessfulDeploymentsInRange(ctx context.
 	return nil
 }
 
+func (gs *GithubDeploymentService) cleanCache() {
+	gs.ghDeployments = make([]*github.Deployment, 0)
+	gs.successfulDeployments = make([]*external_deployments.Deployment, 0)
+}
+
 // ListDeploymentsInRange lists deployments with a deployment status successful in range [from, to]
 func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error) {
+	defer gs.cleanCache()
 
 	err := gs.loadSuccessfulDeploymentsInRange(ctx, from, to)
 	if err != nil {

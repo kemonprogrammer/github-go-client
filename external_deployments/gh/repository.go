@@ -12,6 +12,7 @@ type Repository interface {
 	ListDeploymentStatuses(ctx context.Context, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error)
 	CompareCommits(ctx context.Context, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error)
 }
+
 type GithubRepository struct {
 	client                   *github.Client
 	name, owner, environment string
