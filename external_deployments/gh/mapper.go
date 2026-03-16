@@ -4,22 +4,22 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v81/github"
-	"github.com/kemonprogrammer/github-go-client/external_deployments"
+	"github.com/kemonprogrammer/github-go-client/external_deployments/types"
 )
 
-func toCommits(commitCmp *github.CommitsComparison) []*external_deployments.Commit {
-	commits := make([]*external_deployments.Commit, commitCmp.GetTotalCommits())
+func toCommits(commitCmp *github.CommitsComparison) []*types.Commit {
+	commits := make([]*types.Commit, commitCmp.GetTotalCommits())
 	for i, commit := range commitCmp.Commits {
 		commits[i] = toCommit(commit)
 	}
 	return commits
 }
 
-func toDeployment(ghDeploy *github.Deployment) *external_deployments.Deployment {
+func toDeployment(ghDeploy *github.Deployment) *types.Deployment {
 	if ghDeploy == nil {
 		return nil
 	}
-	return &external_deployments.Deployment{
+	return &types.Deployment{
 		ID:            ghDeploy.GetID(),
 		URL:           ghDeploy.GetURL(),
 		SHA:           ghDeploy.GetSHA(),
@@ -31,16 +31,16 @@ func toDeployment(ghDeploy *github.Deployment) *external_deployments.Deployment 
 	}
 }
 
-func toDeployments(ghDeployments []*github.Deployment) []*external_deployments.Deployment {
-	deployments := make([]*external_deployments.Deployment, len(ghDeployments))
+func toDeployments(ghDeployments []*github.Deployment) []*types.Deployment {
+	deployments := make([]*types.Deployment, len(ghDeployments))
 	for i, d := range ghDeployments {
 		deployments[i] = toDeployment(d)
 	}
 	return deployments
 }
 
-func toCommit(commit *github.RepositoryCommit) *external_deployments.Commit {
-	return &external_deployments.Commit{
+func toCommit(commit *github.RepositoryCommit) *types.Commit {
+	return &types.Commit{
 		SHA:   commit.GetSHA(), // sha somehow stored in commit, not commit.Commit
 		Title: ParseCommitTitle(commit.Commit.GetMessage()),
 		URL:   commit.Commit.GetURL(),

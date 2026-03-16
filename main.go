@@ -10,13 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/kemonprogrammer/github-go-client/config"
 	"github.com/kemonprogrammer/github-go-client/external_deployments"
 	"github.com/kemonprogrammer/github-go-client/external_deployments/gh"
+	"github.com/kemonprogrammer/github-go-client/external_deployments/types"
 )
 
 type Response struct {
-	deployments []external_deployments.Deployment
+	deployments []types.Deployment
 }
 
 type Params struct {
@@ -95,7 +96,6 @@ func main() {
 		return
 	}
 	cfg := SetupConfig()
-	deploymentClient := MakeClient(cfg)
 
 	workload := os.Getenv("WORKLOAD")
 
@@ -104,7 +104,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		resp, err := httpHandler(context.Background(), cfg, workload, deploymentClient)
+		resp, err := httpHandler(context.Background(), cfg, workload)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -119,7 +119,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		resp, err := httpHandler(context.Background(), cfg, workload, deploymentClient)
+		resp, err := httpHandler(context.Background(), cfg, workload)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -131,59 +131,41 @@ func main() {
 	wg.Wait()
 }
 
-func SetupConfig() *Config {
+func SetupConfig() *config.Config {
 	// setup github
-	return &Config{
-		owner:    os.Getenv("OWNER"),
-		env:      os.Getenv("ENVIRONMENT"),
-		token:    os.Getenv("GITHUB_PAT"),
-		enabled:  true,
-		provider: "github",
+	return &config.Config{
+		Owner:    os.Getenv("OWNER"),
+		Env:      os.Getenv("ENVIRONMENT"),
+		Token:    os.Getenv("GITHUB_PAT"),
+		Enabled:  true,
+		Provider: "github",
 	}
 }
 
-func MakeClient(cfg *Config) gh.ClientInterface {
-	githubPat := cfg.token
-	client := github.NewClient(nil).WithAuthToken(githubPat)
-	ghRepo, err := gh.NewGithubClient(client, cfg.owner, cfg.env)
-	if err != nil {
-		fmt.Println(err)
-		return nil
-	}
+func NewDeploymentService(cfg *config.Config, repo string) (external_deployments.DeploymentService, error) {
 
-	return ghRepo
-}
-
-type Config struct {
-	enabled  bool
-	provider string
-	owner    string
-	env      string
-	token    string
-}
-
-func NewDeploymentService(cfg *Config, clientInterface gh.ClientInterface, repo string) (gh.DeploymentService, error) {
-	if cfg.enabled == true {
-		if cfg.provider == "github" {
-			return gh.NewGithubDeploymentService(clientInterface, repo)
+	if cfg.Enabled == true {
+		if cfg.Provider == "github" {
+			deploymentClient := gh.MakeGithubClientInterface(cfg)
+			return gh.NewGithubDeploymentService(deploymentClient, repo)
 		}
 
-		return nil, fmt.Errorf("external deployments provider %s not supported ", cfg.provider)
+		return nil, fmt.Errorf("external deployments provider %s not supported ", cfg.Provider)
 	}
 	return nil, fmt.Errorf("external deployments not enabled")
 }
 
 type DeploymentResponse struct {
-	Deployments []*external_deployments.Deployment `json:"deployments"`
+	Deployments []*types.Deployment `json:"deployments"`
 }
 
-func httpHandler(ctx context.Context, cfg *Config, workload string, deploymentClient gh.ClientInterface) (*DeploymentResponse, error) {
+func httpHandler(ctx context.Context, cfg *config.Config, workload string) (*DeploymentResponse, error) {
 	repo := extractRepoName(workload)
-	deploymentService, err := NewDeploymentService(cfg, deploymentClient, repo)
+	deploymentService, err := NewDeploymentService(cfg, repo)
 	if err != nil {
 		return nil, err
 	}
-	owner := cfg.owner
+	owner := cfg.Owner
 
 	// params
 	if err := deploymentService.ValidateRepo(ctx); err != nil {

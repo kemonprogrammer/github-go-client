@@ -7,22 +7,17 @@ import (
 	"time"
 
 	"github.com/google/go-github/v81/github"
-	"github.com/kemonprogrammer/github-go-client/external_deployments"
+	"github.com/kemonprogrammer/github-go-client/external_deployments/types"
 )
 
 type GithubDeploymentService struct {
-	clientInterface       ClientInterface
+	clientInterface       GithubClientInterface
 	repo                  string
 	ghDeployments         []*github.Deployment
-	successfulDeployments []*external_deployments.Deployment
+	successfulDeployments []*types.Deployment
 }
 
-type DeploymentService interface {
-	ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error)
-	ValidateRepo(ctx context.Context) error
-}
-
-func NewGithubDeploymentService(clientInterface ClientInterface, repo string) (*GithubDeploymentService, error) {
+func NewGithubDeploymentService(clientInterface GithubClientInterface, repo string) (*GithubDeploymentService, error) {
 	if clientInterface == nil {
 		return nil, fmt.Errorf("clientInterface cannot be nil")
 	}
@@ -32,7 +27,7 @@ func NewGithubDeploymentService(clientInterface ClientInterface, repo string) (*
 	}, nil
 }
 
-func (gs *GithubDeploymentService) ListDeployments(ctx context.Context) ([]*external_deployments.Deployment, error) {
+func (gs *GithubDeploymentService) ListDeployments(ctx context.Context) ([]*types.Deployment, error) {
 	err := gs.loadDeployments(ctx)
 
 	if err != nil {
@@ -72,10 +67,10 @@ func (gs *GithubDeploymentService) loadSuccessfulDeploymentsInRange(ctx context.
 	possibleSuccessfulDeploys := filterTimerangeBySuccessPossible(allDeploys, from, to)
 
 	// only refresh success status if not already succeeded
-	newPossibleSuccessfulDeploys := make([]*external_deployments.Deployment, 0, len(possibleSuccessfulDeploys))
+	newPossibleSuccessfulDeploys := make([]*types.Deployment, 0, len(possibleSuccessfulDeploys))
 	for _, possibleDeploy := range possibleSuccessfulDeploys {
 
-		if !slices.ContainsFunc(gs.successfulDeployments, func(deploy *external_deployments.Deployment) bool {
+		if !slices.ContainsFunc(gs.successfulDeployments, func(deploy *types.Deployment) bool {
 			return deploy.ID == possibleDeploy.ID
 		}) {
 			newPossibleSuccessfulDeploys = append(newPossibleSuccessfulDeploys, possibleDeploy)
@@ -88,7 +83,7 @@ func (gs *GithubDeploymentService) loadSuccessfulDeploymentsInRange(ctx context.
 	}
 
 	newSuccessfulDeploys := append(gs.successfulDeployments, populated...)
-	slices.SortFunc(newSuccessfulDeploys, func(a, b *external_deployments.Deployment) int {
+	slices.SortFunc(newSuccessfulDeploys, func(a, b *types.Deployment) int {
 		return int(b.SucceededAt.Unix() - a.SucceededAt.Unix()) // assumption: running on 64-bit or higher architecture
 	})
 
@@ -97,7 +92,7 @@ func (gs *GithubDeploymentService) loadSuccessfulDeploymentsInRange(ctx context.
 }
 
 // ListDeploymentsInRange lists deployments with a deployment status successful in range [from, to]
-func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*external_deployments.Deployment, error) {
+func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*types.Deployment, error) {
 
 	err := gs.loadSuccessfulDeploymentsInRange(ctx, from, to)
 	if err != nil {
@@ -133,7 +128,7 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 	 * the 'from' boundary.
 	 */
 
-	var oneBefore *external_deployments.Deployment
+	var oneBefore *types.Deployment
 	for _, sd := range gs.successfulDeployments {
 		if sd.SucceededAt.Before(from) {
 			oneBefore = sd
@@ -227,7 +222,7 @@ func (gs *GithubDeploymentService) loadDeployments(ctx context.Context) error {
 	return nil
 }
 
-func (gs *GithubDeploymentService) populateWithCommits(ctx context.Context, deployments []*external_deployments.Deployment) ([]*external_deployments.Deployment, error) {
+func (gs *GithubDeploymentService) populateWithCommits(ctx context.Context, deployments []*types.Deployment) ([]*types.Deployment, error) {
 	// If there are no deployments to compare it to
 	if len(deployments) <= 1 {
 		return deployments, nil
@@ -277,8 +272,8 @@ func (gs *GithubDeploymentService) populateWithCommits(ctx context.Context, depl
 	return deployments, nil
 }
 
-func (gs *GithubDeploymentService) filterSuccessful(ctx context.Context, deployments []*external_deployments.Deployment) ([]*external_deployments.Deployment, error) {
-	successful := make([]*external_deployments.Deployment, 0, len(deployments))
+func (gs *GithubDeploymentService) filterSuccessful(ctx context.Context, deployments []*types.Deployment) ([]*types.Deployment, error) {
+	successful := make([]*types.Deployment, 0, len(deployments))
 
 	for _, d := range deployments {
 		statuses, err := gs.clientInterface.ListDeploymentStatuses(ctx, gs.repo, d.ID, &github.ListOptions{
@@ -298,8 +293,8 @@ func (gs *GithubDeploymentService) filterSuccessful(ctx context.Context, deploym
 	return successful, nil
 }
 
-func filterTimerangeBySucceededAt(deployments []*external_deployments.Deployment, from time.Time, to time.Time) []*external_deployments.Deployment {
-	filtered := make([]*external_deployments.Deployment, 0, len(deployments))
+func filterTimerangeBySucceededAt(deployments []*types.Deployment, from time.Time, to time.Time) []*types.Deployment {
+	filtered := make([]*types.Deployment, 0, len(deployments))
 	for _, d := range deployments {
 		if d.SucceededAt.After(from) && d.SucceededAt.Before(to) {
 			filtered = append(filtered, d)
@@ -309,8 +304,8 @@ func filterTimerangeBySucceededAt(deployments []*external_deployments.Deployment
 }
 
 // filterTimerangeBySuccessPossible filters deployments which could have a succeeded in the timeframe
-func filterTimerangeBySuccessPossible(deployments []*external_deployments.Deployment, from time.Time, to time.Time) []*external_deployments.Deployment {
-	filtered := make([]*external_deployments.Deployment, 0, len(deployments))
+func filterTimerangeBySuccessPossible(deployments []*types.Deployment, from time.Time, to time.Time) []*types.Deployment {
+	filtered := make([]*types.Deployment, 0, len(deployments))
 	for _, d := range deployments {
 		if d.UpdatedAt.After(from) && d.CreatedAt.Before(to) {
 			filtered = append(filtered, d)
@@ -320,8 +315,8 @@ func filterTimerangeBySuccessPossible(deployments []*external_deployments.Deploy
 }
 
 // populateSuccessStatus assumption: deployment status states: x -> success -> inactive
-func (gs *GithubDeploymentService) populateSuccessStatus(ctx context.Context, deploys []*external_deployments.Deployment) ([]*external_deployments.Deployment, error) {
-	successful := make([]*external_deployments.Deployment, 0, len(deploys))
+func (gs *GithubDeploymentService) populateSuccessStatus(ctx context.Context, deploys []*types.Deployment) ([]*types.Deployment, error) {
+	successful := make([]*types.Deployment, 0, len(deploys))
 
 	for _, d := range deploys {
 		// todo get all deployment statuses in case there is a next page

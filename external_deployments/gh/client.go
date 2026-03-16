@@ -5,32 +5,46 @@ import (
 	"fmt"
 
 	"github.com/google/go-github/v81/github"
+	"github.com/kemonprogrammer/github-go-client/config"
 )
 
-type ClientInterface interface {
+// GithubClientInterface mock for testing
+type GithubClientInterface interface {
 	GetRepository(ctx context.Context, repoName string) (*github.Repository, *github.Response, error)
 	ListDeployments(ctx context.Context, repoName string, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error)
 	ListDeploymentStatuses(ctx context.Context, repoName string, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error)
 	CompareCommits(ctx context.Context, repoName, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error)
 }
 
-type GithubRepository struct {
+type GithubClient struct {
 	client             *github.Client
 	owner, environment string
 }
 
-func NewGithubClient(client *github.Client, owner, environment string) (ClientInterface, error) {
+func MakeGithubClientInterface(cfg *config.Config) GithubClientInterface {
+	githubPat := cfg.Token
+	gh := github.NewClient(nil).WithAuthToken(githubPat)
+	clientInterface, err := NewGithubClient(gh, cfg.Owner, cfg.Env)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	return clientInterface
+}
+
+func NewGithubClient(client *github.Client, owner, environment string) (GithubClientInterface, error) {
 	if client == nil {
 		return nil, fmt.Errorf("github client cannot be nil")
 	}
-	return &GithubRepository{
+	return &GithubClient{
 		client:      client,
 		owner:       owner,
 		environment: environment,
 	}, nil
 }
 
-func (gc *GithubRepository) GetRepository(ctx context.Context, repoName string) (*github.Repository, *github.Response, error) {
+func (gc *GithubClient) GetRepository(ctx context.Context, repoName string) (*github.Repository, *github.Response, error) {
 	repo, resp, err := gc.client.Repositories.Get(ctx, gc.owner, repoName)
 	if err != nil {
 		return nil, nil, err
@@ -38,7 +52,7 @@ func (gc *GithubRepository) GetRepository(ctx context.Context, repoName string) 
 	return repo, resp, nil
 }
 
-func (gc *GithubRepository) ListDeployments(ctx context.Context, repoName string, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error) {
+func (gc *GithubClient) ListDeployments(ctx context.Context, repoName string, opts *github.DeploymentsListOptions) ([]*github.Deployment, *github.Response, error) {
 	fmt.Printf("TRACE ListDeployments\n")
 	if opts.Environment == "" {
 		opts.Environment = gc.environment
@@ -47,13 +61,13 @@ func (gc *GithubRepository) ListDeployments(ctx context.Context, repoName string
 	return deploys, resp, err
 }
 
-func (gc *GithubRepository) ListDeploymentStatuses(ctx context.Context, repoName string, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error) {
+func (gc *GithubClient) ListDeploymentStatuses(ctx context.Context, repoName string, id int64, opts *github.ListOptions) ([]*github.DeploymentStatus, error) {
 	fmt.Printf("TRACE ListDeploymentStatuses\n")
 	statuses, _, err := gc.client.Repositories.ListDeploymentStatuses(ctx, gc.owner, repoName, id, opts)
 	return statuses, err
 }
 
-func (gc *GithubRepository) CompareCommits(ctx context.Context, repoName, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error) {
+func (gc *GithubClient) CompareCommits(ctx context.Context, repoName, base, head string, opts *github.ListOptions) (*github.CommitsComparison, error) {
 	fmt.Printf("TRACE CompareCommits\n")
 	commitCmp, _, err := gc.client.Repositories.CompareCommits(ctx, gc.owner, repoName, base, head, opts)
 	if err != nil {
