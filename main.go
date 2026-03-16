@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/go-github/v81/github"
@@ -94,47 +95,98 @@ func main() {
 		return
 	}
 	cfg := SetupConfig()
-	deploymentService := SetupServices(cfg)
+	deploymentClient := MakeClient(cfg)
 
 	workload := os.Getenv("WORKLOAD")
-	callHttpEndpoint(context.Background(), cfg, workload, deploymentService)
+
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		resp, err := httpHandler(context.Background(), cfg, workload, deploymentClient)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		newerDeployments := resp.Deployments
+		fmt.Printf("len newer deploys: %d\n", len(newerDeployments))
+
+		fmt.Printf("newer deployments response: %+v\n", newerDeployments)
+	}()
+
+	// -- 2nd call
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		resp, err := httpHandler(context.Background(), cfg, workload, deploymentClient)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		newerDeployments := resp.Deployments
+		fmt.Printf("2nd time to test cache: deployments response: %+v\n", newerDeployments)
+	}()
+
+	wg.Wait()
 }
 
 func SetupConfig() *Config {
 	// setup github
 	return &Config{
-		owner: os.Getenv("OWNER"),
-		env:   os.Getenv("ENVIRONMENT"),
+		owner:    os.Getenv("OWNER"),
+		env:      os.Getenv("ENVIRONMENT"),
+		token:    os.Getenv("GITHUB_PAT"),
+		enabled:  true,
+		provider: "github",
 	}
 }
 
-func SetupServices(cfg *Config) gh.DeploymentService {
-	githubPat := os.Getenv("GITHUB_PAT")
+func MakeClient(cfg *Config) gh.ClientInterface {
+	githubPat := cfg.token
 	client := github.NewClient(nil).WithAuthToken(githubPat)
-	ghRepo, err := gh.NewGithubRepository(client, cfg.owner, "", cfg.env)
+	ghRepo, err := gh.NewGithubClient(client, cfg.owner, cfg.env)
 	if err != nil {
 		fmt.Println(err)
 		return nil
 	}
-	deploymentService, err := gh.NewGithubDeploymentService(ghRepo)
-	if err != nil {
-		fmt.Println(err)
-		return nil
-	}
-	return deploymentService
+
+	return ghRepo
 }
 
 type Config struct {
-	owner string
-	env   string
+	enabled  bool
+	provider string
+	owner    string
+	env      string
+	token    string
 }
 
-func callHttpEndpoint(ctx context.Context, config *Config, workload string, deploymentService gh.DeploymentService) {
-	owner := config.owner
+func NewDeploymentService(cfg *Config, clientInterface gh.ClientInterface, repo string) (gh.DeploymentService, error) {
+	if cfg.enabled == true {
+		if cfg.provider == "github" {
+			return gh.NewGithubDeploymentService(clientInterface, repo)
+		}
+
+		return nil, fmt.Errorf("external deployments provider %s not supported ", cfg.provider)
+	}
+	return nil, fmt.Errorf("external deployments not enabled")
+}
+
+type DeploymentResponse struct {
+	Deployments []*external_deployments.Deployment `json:"deployments"`
+}
+
+func httpHandler(ctx context.Context, cfg *Config, workload string, deploymentClient gh.ClientInterface) (*DeploymentResponse, error) {
+	repo := extractRepoName(workload)
+	deploymentService, err := NewDeploymentService(cfg, deploymentClient, repo)
+	if err != nil {
+		return nil, err
+	}
+	owner := cfg.owner
 
 	// params
-	repoName := extractRepoName(workload)
-	if err := deploymentService.ValidateRepo(ctx, repoName); err != nil {
+	if err := deploymentService.ValidateRepo(ctx); err != nil {
 		fmt.Println(err)
 		fmt.Println(fmt.Errorf("no repository found for workload %s", workload))
 	}
@@ -162,22 +214,16 @@ func callHttpEndpoint(ctx context.Context, config *Config, workload string, depl
 	to, err := time.Parse(time.RFC3339, "2026-02-16T01:20:00+01:00")
 	if err != nil {
 		fmt.Println(err)
-		return
+		return nil, err
 	}
 
-	newerDeployments, err := deploymentService.ListDeploymentsInRange(ctx, repoName, from, to)
+	newerDeployments, err := deploymentService.ListDeploymentsInRange(ctx, from, to)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return nil, err
 	}
-	fmt.Printf("len newer deploys: %d\n", len(newerDeployments))
-	fmt.Printf("newer deployments response: %+v\n", newerDeployments)
-	newerDeployments, err = deploymentService.ListDeploymentsInRange(ctx, repoName, from, to)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Printf("2nd time to test cache: deployments response: %+v\n", newerDeployments)
+	return &DeploymentResponse{Deployments: newerDeployments}, nil
+
 }
 
 func extractRepoName(workload string) string {
