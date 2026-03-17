@@ -6,6 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/google/go-github/v81/github"
 	"github.com/kemonprogrammer/github-go-client/external_deployments/types"
 )
@@ -223,51 +225,67 @@ func (gs *GithubDeploymentService) loadDeployments(ctx context.Context) error {
 }
 
 func (gs *GithubDeploymentService) populateWithCommits(ctx context.Context, deployments []*types.Deployment) ([]*types.Deployment, error) {
-	// If there are no deployments to compare it to
 	if len(deployments) <= 1 {
 		return deployments, nil
 	}
 
+	// Create an errgroup with a derived context that cancels if any goroutine errors out.
+	g, gCtx := errgroup.WithContext(ctx)
+
 	for i := range len(deployments) - 1 {
-		d := deployments[i]
 
-		head := deployments[i].SHA
-		base := deployments[i+1].SHA
+		g.Go(func() error {
+			d := deployments[i]
+			head := deployments[i].SHA
+			base := deployments[i+1].SHA
 
-		commitCmp, err := gs.clientInterface.CompareCommits(ctx, gs.repo, base, head, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error while comparing commits %w", err)
-		}
-
-		d.ComparisonURL = commitCmp.GetHTMLURL()
-
-		switch status := commitCmp.GetStatus(); status {
-		case "ahead":
-			d.Added = toCommits(commitCmp)
-
-		case "behind":
-			behindCmp, err := gs.clientInterface.CompareCommits(ctx, gs.repo, head, base, &github.ListOptions{})
+			// Use the gCtx so this request cancels if another goroutine fails
+			commitCmp, err := gs.clientInterface.CompareCommits(gCtx, gs.repo, base, head, nil)
 			if err != nil {
-				return nil, fmt.Errorf("error comparing behind commits: %w", err)
+				return fmt.Errorf("error while comparing commits: %w", err)
 			}
-			d.Removed = toCommits(behindCmp)
 
-		case "diverged":
-			d.Added = toCommits(commitCmp)
+			d.ComparisonURL = commitCmp.GetHTMLURL()
 
-			mergeBase := commitCmp.GetMergeBaseCommit().GetSHA()
-			divergedCmp, err := gs.clientInterface.CompareCommits(ctx, gs.repo, mergeBase, base, &github.ListOptions{})
-			if err != nil {
-				return nil, fmt.Errorf("error comparing diverged commits: %w", err)
+			switch status := commitCmp.GetStatus(); status {
+			case "ahead":
+				d.Added = toCommits(commitCmp)
+
+			case "behind":
+				behindCmp, err := gs.clientInterface.CompareCommits(gCtx, gs.repo, head, base, &github.ListOptions{})
+				if err != nil {
+					return fmt.Errorf("error comparing behind commits: %w", err)
+				}
+				d.Removed = toCommits(behindCmp)
+
+			case "diverged":
+				d.Added = toCommits(commitCmp)
+				mergeBase := commitCmp.GetMergeBaseCommit().GetSHA()
+				divergedCmp, err := gs.clientInterface.CompareCommits(gCtx, gs.repo, mergeBase, base, &github.ListOptions{})
+				if err != nil {
+					return fmt.Errorf("error comparing diverged commits: %w", err)
+				}
+				d.Removed = toCommits(divergedCmp)
+
+			case "identical":
+				// No action needed if slices are already nil or empty
+			default:
+				return fmt.Errorf("unexpected commit status: %s", status)
 			}
-			d.Removed = toCommits(divergedCmp)
 
-		case "identical":
-			// No action needed if slices are already nil or empty
-		default:
-			return nil, fmt.Errorf("unexpected commit status: %s", status)
-		}
+			return nil // Return nil to signal success to the errgroup
+		})
 	}
+
+	// Wait blocks until all goroutines finish, returning the first non-nil error (if any)
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Sort the slice in place
+	slices.SortFunc(deployments, func(a, b *types.Deployment) int {
+		return int(b.SucceededAt.Unix() - a.SucceededAt.Unix())
+	})
 
 	return deployments, nil
 }
