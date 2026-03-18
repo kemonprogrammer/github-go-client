@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -15,7 +17,8 @@ import (
 )
 
 type Response struct {
-	deployments []types.Deployment
+	Deployments []*types.Deployment `json:"deployments"`
+	Size        int                 `json:"total"`
 }
 
 type Params struct {
@@ -98,7 +101,7 @@ func main() {
 	workload := os.Getenv("WORKLOAD")
 
 	wg := sync.WaitGroup{}
-
+	var newerDeployments []*types.Deployment
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -107,26 +110,44 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		newerDeployments := resp.Deployments
+		newerDeployments = resp.Deployments
 		fmt.Printf("len newer deploys: %d\n", len(newerDeployments))
 
 		fmt.Printf("newer deployments response: %+v\n", newerDeployments)
 	}()
 
-	// -- 2nd call
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		resp, err := handler.HttpHandler(context.Background(), cfg, workload)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		newerDeployments := resp.Deployments
-		fmt.Printf("2nd time to test cache: deployments response: %+v\n", newerDeployments)
-	}()
+	//// -- 2nd call
+	//wg.Add(1)
+	//go func() {
+	//	defer wg.Done()
+	//	resp, err := handler.HttpHandler(context.Background(), cfg, workload)
+	//	if err != nil {
+	//		fmt.Println(err)
+	//		return
+	//	}
+	//	newerDeployments := resp.Deployments
+	//	fmt.Printf("2nd time to test cache: deployments response: %+v\n", newerDeployments)
+	//}()
 
 	wg.Wait()
+
+	// 1. Initialize your data
+	res := Response{
+		Deployments: newerDeployments,
+		Size:        len(newerDeployments),
+	}
+
+	// 2. Marshal to JSON (returns []byte)
+	jsonData, err := json.Marshal(res)
+	if err != nil {
+		log.Fatalf("Error marshaling JSON: %v", err)
+	}
+
+	// 3. Convert []byte to string
+	jsonString := string(jsonData)
+
+	fmt.Printf("%s", jsonString)
+
 }
 
 func SetupConfig() *config.Config {
