@@ -44,8 +44,8 @@ func HttpHandler(ctx context.Context, cfg *config.Config, workload string) (*Dep
 	//fmt.Printf("len deploys: %d\n", len(deployments))
 	//fmt.Printf("deployments response: %+v\n", deployments)
 
-	from, err := time.Parse(time.RFC3339, "2026-02-16T01:00:00+01:00")
-	to, err := time.Parse(time.RFC3339, "2026-02-16T01:20:00+01:00")
+	from, err := time.Parse(time.RFC3339, "2026-03-18T02:00:00+01:00")
+	to, err := time.Parse(time.RFC3339, "2026-03-18T02:20:00+01:00")
 	if err != nil {
 		fmt.Println(err)
 		return nil, err

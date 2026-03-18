@@ -105,31 +105,6 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 
 	inRange := filterTimerangeBySucceededAt(successful, from, to)
 
-	/*
-	 * PROOF: Existence and Retrieval of the active deployment 'd' before 'from'.
-	 *
-	 * Definitions:
-	 * - s (succeededAt): The start of a deployment's active period.
-	 * - u (updatedAt): The end of a deployment's active period (when it was superseded).
-	 *
-	 * 1. Invariant (Temporal Continuity): For any two sequential deployments D_n and D_{n+1},
-	 * u_n >= s_{n+1}. This ensures the timeline is a continuous partition; there are no gaps
-	 * without an active deployment.
-	 *
-	 * 2. Invariant (Monotonicity): GitHub's append-only nature guarantees that the
-	 * sequence of SucceededAt timestamps is non-decreasing.
-	 *
-	 * 3. Range Inclusion: loadSuccessfulDeploymentsInRange fetches all deployments
-	 * where the interval [s, u] overlaps with [from, to]. Since Continuity (1)
-	 * guarantees a deployment 'd' exists such that d.s <= from <= d.u, 'd'
-	 * is guaranteed to be present in gs.successfulDeployments.
-	 *
-	 * 4. Completeness: Because gs.successfulDeployments is sorted by SucceededAt DESC,
-	 * the first deployment 'sd' encountered where sd.SucceededAt < from is
-	 * mathematically guaranteed to be the deployment 'd' that was active at
-	 * the 'from' boundary.
-	 */
-
 	var oneBefore *types.Deployment
 	for _, sd := range gs.successfulDeployments {
 		if sd.SucceededAt.Before(from) {
