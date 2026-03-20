@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/kemonprogrammer/github-go-client/config"
-	"github.com/kemonprogrammer/github-go-client/external_deployments/types"
+	"github.com/kemonprogrammer/github-go-client/external_deployments/model"
 	"github.com/kemonprogrammer/github-go-client/handler"
 )
 
 type Response struct {
-	Deployments []*types.Deployment `json:"deployments"`
+	Deployments []*model.Deployment `json:"deployments"`
 	Size        int                 `json:"total"`
 }
 
@@ -101,15 +101,19 @@ func main() {
 	workload := os.Getenv("WORKLOAD")
 
 	wg := sync.WaitGroup{}
-	var newerDeployments []*types.Deployment
+	var newerDeployments []*model.Deployment
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		start := time.Now()
+
 		resp, err := handler.HttpHandler(context.Background(), cfg, workload)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+		log.Printf("TRACE whole function took %v\n", time.Since(start))
+
 		newerDeployments = resp.Deployments
 		fmt.Printf("len newer deploys: %d\n", len(newerDeployments))
 

@@ -7,11 +7,11 @@ import (
 
 	"github.com/kemonprogrammer/github-go-client/config"
 	"github.com/kemonprogrammer/github-go-client/external_deployments/gh"
-	"github.com/kemonprogrammer/github-go-client/external_deployments/types"
+	"github.com/kemonprogrammer/github-go-client/external_deployments/model"
 )
 
 type DeploymentService interface {
-	ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*types.Deployment, error)
+	ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*model.Deployment, error)
 	ValidateRepo(ctx context.Context) error
 }
 

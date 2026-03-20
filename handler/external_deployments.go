@@ -8,7 +8,7 @@ import (
 
 	"github.com/kemonprogrammer/github-go-client/config"
 	"github.com/kemonprogrammer/github-go-client/external_deployments"
-	"github.com/kemonprogrammer/github-go-client/external_deployments/types"
+	"github.com/kemonprogrammer/github-go-client/external_deployments/model"
 )
 
 func HttpHandler(ctx context.Context, cfg *config.Config, workload string) (*DeploymentResponse, error) {
@@ -61,7 +61,7 @@ func HttpHandler(ctx context.Context, cfg *config.Config, workload string) (*Dep
 }
 
 type DeploymentResponse struct {
-	Deployments []*types.Deployment `json:"deployments"`
+	Deployments []*model.Deployment `json:"deployments"`
 }
 
 func extractRepoName(workload string) string {
