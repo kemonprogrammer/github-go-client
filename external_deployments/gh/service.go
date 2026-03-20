@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -102,7 +103,6 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 		return nil, err
 	}
 	successful := gs.successfulDeployments
-	fmt.Printf("successful: %d\n", len(successful))
 
 	inRange := filterTimerangeBySucceededAt(successful, from, to)
 
@@ -253,12 +253,12 @@ func (gs *GithubDeploymentService) populateWithCommits(ctx context.Context, depl
 			return nil // Return nil to signal success to the errgroup
 		})
 	}
-	log.Printf("TRACE comparing %d times took %v\n", len(deployments)-1, time.Since(start))
 
 	// Wait blocks until all goroutines finish, returning the first non-nil error (if any)
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
+	log.Printf("TRACE comparing %d times took %v\n", len(deployments)-1, time.Since(start))
 
 	// Sort the slice in place
 	slices.SortFunc(deployments, func(a, b *model.Deployment) int {
@@ -292,33 +292,48 @@ func filterTimerangeBySuccessPossible(deployments []*model.Deployment, from time
 // populateSuccessStatus assumption: deployment status states: x -> success -> inactive
 func (gs *GithubDeploymentService) populateSuccessStatus(ctx context.Context, deploys []*model.Deployment) ([]*model.Deployment, error) {
 	successful := make([]*model.Deployment, 0, len(deploys))
+	var mu sync.Mutex
+	g, gCtx := errgroup.WithContext(ctx)
+
+	start := time.Now()
 
 	for _, d := range deploys {
-		opts := &github.DeploymentsListOptions{
-			ListOptions: github.ListOptions{Page: 1},
-		}
-	out:
-		for opts.ListOptions.Page > 0 {
-			statuses, resp, err := gs.clientInterface.ListDeploymentStatuses(ctx, gs.repo, d.ID, &github.ListOptions{
-				PerPage: 30,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to get deployment statuses for %d: %w", d.ID, err)
+		g.Go(func() error {
+			opts := &github.ListOptions{
+				Page: 1,
 			}
-			opts.ListOptions.Page = resp.NextPage
+		out:
+			for opts.Page > 0 {
+				statuses, resp, err := gs.clientInterface.ListDeploymentStatuses(gCtx, gs.repo, d.ID, opts)
+				if err != nil {
+					return fmt.Errorf("failed to get deployment statuses for %d: %w", d.ID, err)
+				}
+				opts.Page = resp.NextPage
 
-			if resp.Rate.Remaining <= 10 {
-				return nil, fmt.Errorf("rate limit nearly exhausted, only 10 calls remaining; resets at %v", resp.Rate.Reset)
-			}
+				if resp.Rate.Remaining <= 10 {
+					return fmt.Errorf("rate limit nearly exhausted, only 10 calls remaining; resets at %v", resp.Rate.Reset)
+				}
 
-			for _, status := range statuses {
-				if status.GetState() == "success" {
-					d.SucceededAt = status.GetUpdatedAt().Time
-					successful = append(successful, d)
-					break out
+				for _, status := range statuses {
+					if status.GetState() == "success" {
+						d.SucceededAt = status.GetUpdatedAt().Time
+						mu.Lock()
+						successful = append(successful, d)
+						mu.Unlock()
+						break out
+					}
 				}
 			}
-		}
+			return nil
+		})
 	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	log.Printf("TRACE loading success statuses took %v\n", time.Since(start))
+
+	slices.SortFunc(successful, func(a, b *model.Deployment) int {
+		return int(b.SucceededAt.Unix() - a.SucceededAt.Unix())
+	})
 	return successful, nil
 }
