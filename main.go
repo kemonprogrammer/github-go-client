@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -87,15 +86,15 @@ func loadExampleRunsCache() (map[int64]time.Time, error) {
 
 func main() {
 
-	if strings.ToUpper(os.Getenv("TEST")) == "TRUE" {
-		cache, err := loadExampleRunsCache()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		fmt.Println(cache)
-		return
-	}
+	//if strings.ToUpper(os.Getenv("TEST")) == "TRUE" {
+	//	cache, err := loadExampleRunsCache()
+	//	if err != nil {
+	//		fmt.Println(err)
+	//		return
+	//	}
+	//	fmt.Println(cache)
+	//	return
+	//}
 	cfg := SetupConfig()
 
 	workload := os.Getenv("WORKLOAD")

@@ -3,6 +3,7 @@ package external_deployments
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/kemonprogrammer/github-go-client/config"
@@ -16,6 +17,11 @@ type DeploymentService interface {
 }
 
 func NewDeploymentService(cfg *config.Config, repo string) (DeploymentService, error) {
+	if os.Getenv("TEST") == "true" {
+		mockDeploymentClient := gh.NewMockGithubClient()
+		return gh.NewGithubDeploymentService(mockDeploymentClient, repo)
+	}
+
 	if cfg.Enabled == true {
 		if cfg.Provider == "github" {
 			deploymentClient := gh.MakeGithubClientInterface(cfg)

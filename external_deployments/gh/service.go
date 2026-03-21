@@ -114,7 +114,11 @@ func (gs *GithubDeploymentService) ListDeploymentsInRange(ctx context.Context, f
 		}
 	}
 
-	populated, err := gs.populateWithCommits(ctx, append(inRange, oneBefore))
+	if oneBefore != nil {
+		inRange = append(inRange, oneBefore)
+	}
+
+	populated, err := gs.populateWithCommits(ctx, inRange)
 	if err != nil {
 		return nil, err
 	}
