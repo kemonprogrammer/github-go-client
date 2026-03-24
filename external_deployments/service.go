@@ -3,32 +3,66 @@ package external_deployments
 import (
 	"context"
 	"fmt"
-	"os"
-	"time"
 
 	"github.com/kemonprogrammer/github-go-client/config"
-	"github.com/kemonprogrammer/github-go-client/external_deployments/gh"
 	"github.com/kemonprogrammer/github-go-client/external_deployments/model"
+	"github.com/kemonprogrammer/github-go-client/models"
 )
 
-type DeploymentService interface {
-	ListDeploymentsInRange(ctx context.Context, from, to time.Time) ([]*model.Deployment, error)
-	ValidateRepo(ctx context.Context) error
+type DeploymentService struct {
+	deploymentClientInterface DeploymentClient
+	conf                      *config.Config
 }
 
-func NewDeploymentService(cfg *config.Config, repo string) (DeploymentService, error) {
-	if os.Getenv("TEST") == "true" {
-		mockDeploymentClient := gh.NewMockGithubClient()
-		return gh.NewGithubDeploymentService(mockDeploymentClient, repo)
+func NewDeploymentService(conf *config.Config, client DeploymentClient) (*DeploymentService, error) {
+
+	return &DeploymentService{
+		deploymentClientInterface: client,
+		conf:                      conf,
+	}, nil
+}
+
+func (in *DeploymentService) client() (DeploymentClient, error) {
+	if !in.conf.Enabled {
+		return nil, fmt.Errorf("external deployments are not enabled")
+	}
+	if in.deploymentClientInterface == nil {
+		return nil, fmt.Errorf("external deployments service is not initialized")
 	}
 
-	if cfg.Enabled == true {
-		if cfg.Provider == "github" {
-			deploymentClient := gh.MakeGithubClientInterface(cfg)
-			return gh.NewGithubDeploymentService(deploymentClient, repo)
-		}
-
-		return nil, fmt.Errorf("external deployments provider %s not supported ", cfg.Provider)
+	return in.deploymentClientInterface, nil
+}
+func (in *DeploymentService) ListDeploymentsInRange(ctx context.Context, q models.DeploymentsQuery) ([]*model.Deployment, error) {
+	client, err := in.client()
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("external deployments not enabled")
+
+	//var end observability.EndFunc
+	//ctx, end = observability.StartSpan(ctx, "ListDeploymentsInRange",
+	//	observability.Attribute("package", "external_deployments"),
+	//	//observability.Attribute(observability.TracingClusterTag, query.Cluster),
+	//	observability.Attribute("cluster", q.Cluster),
+	//	observability.Attribute("namespace", q.Namespace),
+	//	observability.Attribute("repository", client.GetRepo()),
+	//)
+	//defer end()
+
+	deployments, err := client.ListDeploymentsInRange(ctx, q.From, q.To)
+	if err != nil {
+		return nil, err
+	}
+	return deployments, nil
+}
+
+func (in *DeploymentService) SetRepo(ctx context.Context, repo string) error {
+	client, err := in.client()
+	if err != nil {
+		return err
+	}
+	err = client.SetRepo(ctx, repo)
+	if err != nil {
+		return err
+	}
+	return nil
 }

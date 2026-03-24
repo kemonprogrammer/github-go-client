@@ -1,9 +1,10 @@
-package gh
+package github
 
 import (
 	"strings"
 
 	"github.com/google/go-github/v81/github"
+
 	"github.com/kemonprogrammer/github-go-client/external_deployments/model"
 )
 

@@ -9,18 +9,25 @@ import (
 	"github.com/kemonprogrammer/github-go-client/config"
 	"github.com/kemonprogrammer/github-go-client/external_deployments"
 	"github.com/kemonprogrammer/github-go-client/external_deployments/model"
+	"github.com/kemonprogrammer/github-go-client/models"
 )
 
-func HttpHandler(ctx context.Context, cfg *config.Config, workload string) (*DeploymentResponse, error) {
+func HttpHandler(ctx context.Context, conf *config.Config, workload string) (*DeploymentResponse, error) {
 	repo := extractRepoName(workload)
-	deploymentService, err := external_deployments.NewDeploymentService(cfg, repo)
+
+	deploymentClient, err := external_deployments.NewDeploymentClient(conf)
 	if err != nil {
 		return nil, err
 	}
-	owner := cfg.Owner
+	deploymentService, err := external_deployments.NewDeploymentService(conf, deploymentClient)
+	if err != nil {
+		return nil, err
+	}
+
+	owner := conf.Owner
 
 	// params
-	if err := deploymentService.ValidateRepo(ctx); err != nil {
+	if err := deploymentService.SetRepo(ctx, repo); err != nil {
 		fmt.Println(err)
 		fmt.Println(fmt.Errorf("no repository found for workload %s", workload))
 	}
@@ -46,14 +53,22 @@ func HttpHandler(ctx context.Context, cfg *config.Config, workload string) (*Dep
 
 	from, err := time.Parse(time.RFC3339, "2026-03-18T02:00:00+01:00")
 	to, err := time.Parse(time.RFC3339, "2026-03-18T03:00:00+01:00")
-	from = time.Now().Add(-10 * time.Minute)
-	to = time.Now()
+	//from = time.Now().Add(-10 * time.Minute)
+	//to = time.Now()
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 
-	deployments, err := deploymentService.ListDeploymentsInRange(ctx, from, to)
+	q := models.DeploymentsQuery{
+		From:      from,
+		To:        to,
+		Cluster:   "",
+		Namespace: "",
+		Workload:  "",
+	}
+
+	deployments, err := deploymentService.ListDeploymentsInRange(ctx, q)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
